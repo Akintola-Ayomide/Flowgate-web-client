@@ -18,6 +18,10 @@
   --radius: 0.5rem;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

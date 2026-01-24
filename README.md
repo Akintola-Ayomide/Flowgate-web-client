@@ -16,8 +16,14 @@
 - **Responsive Layout**: A split-screen design featuring a dynamic branding hero section (desktop) and a clean, focused form area (mobile/desktop).
 - **Custom Branding**: Unique "Qline" logo design with a distinct typographic treatment and decorative background elements.
 
+### 🏠 Landing Page
+- **Comprehensive Sections**: Detailed 'Hero', 'Features', 'How It Works', 'App Download', and 'Footer' components.
+- **Micro-Interactions**: Rich hover states, scroll-triggered animations, and spring physics using Framer Motion.
+- **Navigation**: Smooth scroll functionality to defined sections (`#features`, `#how-it-works`, `#download`) and direct links to Auth.
+- **Visuals**: Custom SVG iconography and CSS-drawn device mockups for a lightweight yet polished look.
+
 ### 🏗 Architecture
-- **Feature-Based Structure**: Codebase organized by features (e.g., `features/auth`) containing dedicated components, services, hooks, and types.
+- **Feature-Based Structure**: Codebase organized by features (e.g., `features/auth`, `features/landing`) containing dedicated components, services, hooks, and types.
 - **Shared UI Library**: Reusable implementation of atomic components (Buttons, Inputs, Checkboxes) located in `shared/ui`.
 - **Next.js 16 App Router**: Leveraging Server Components and Client Components appropriately for performance and SEO.
 - **TypeScript**: Strict type safety across DTOs, API responses, and Component props.
@@ -36,13 +42,14 @@
 web-frontend/
 ├── app/                  # Next.js App Router (Pages & Layouts)
 │   ├── auth/             # Auth pages (e.g., Callback)
-│   └── page.tsx          # Home page (with conditional Auth UI)
+│   └── page.tsx          # Home page (Landing Page)
 ├── features/             # Feature-based modules
-│   └── auth/
-│       ├── components/   # Auth UI (LoginForm, SignupForm, Layout)
-│       ├── context/      # AuthProvider & useAuth hook
-│       ├── services/     # API Client & AuthService
-│       └── types/        # TS Interfaces (User, LoginDTO, etc.)
+│   ├── auth/             # Authentication logic & UI
+│   │   ├── components/
+│   │   ├── context/
+│   │   └── services/
+│   └── landing/          # Landing Page sections
+│       └── components/   # Hero, Features, Footer, etc.
 ├── shared/               # Shared resources
 │   └── ui/               # Reusable atomic buttons, inputs, etc.
 └── public/               # Static assets

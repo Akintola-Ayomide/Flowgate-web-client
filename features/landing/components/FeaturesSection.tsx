@@ -1,5 +1,7 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 export function FeaturesSection() {
     const features = [
         {
@@ -59,37 +61,74 @@ export function FeaturesSection() {
         },
     ];
 
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1,
+                delayChildren: 0.2,
+            },
+        },
+    };
+
+    const itemVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.5, ease: 'easeOut' },
+        },
+    };
+
     return (
         <section id="features" className="py-20 px-6 bg-gradient-to-b from-white to-blue-50/30">
             <div className="max-w-7xl mx-auto">
                 {/* Section Header */}
-                <div className="text-center mb-16 space-y-4">
-                    <div className="inline-block px-4 py-2 bg-blue-50 border border-blue-100 rounded-full mb-4">
+                <motion.div
+                    className="text-center mb-16 space-y-4"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-100px" }}
+                    transition={{ duration: 0.6 }}
+                >
+                    <motion.div
+                        className="inline-block px-4 py-2 bg-blue-50 border border-blue-100 rounded-full mb-4"
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                    >
                         <span className="text-sm font-semibold text-blue-700">Features</span>
-                    </div>
+                    </motion.div>
                     <h2 className="text-4xl lg:text-5xl font-bold text-slate-900">
                         Powerful Features for Everyone
                     </h2>
                     <p className="text-lg text-slate-600 max-w-2xl mx-auto">
                         Whether you're joining a queue or managing one, Qline has the tools you need.
                     </p>
-                </div>
+                </motion.div>
 
                 {/* Features Grid */}
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <motion.div
+                    className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
+                    variants={containerVariants}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={{ once: true, margin: "-50px" }}
+                >
                     {features.map((feature, index) => (
-                        <div
+                        <motion.div
                             key={index}
                             className="group bg-white rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                            variants={itemVariants}
                         >
                             <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-50 flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform">
                                 {feature.icon}
                             </div>
                             <h3 className="text-lg font-semibold text-slate-900 mb-2">{feature.title}</h3>
                             <p className="text-slate-600 leading-relaxed">{feature.description}</p>
-                        </div>
+                        </motion.div>
                     ))}
-                </div>
+                </motion.div>
             </div>
         </section>
     );

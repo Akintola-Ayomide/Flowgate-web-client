@@ -3,35 +3,13 @@
 import Link from 'next/link';
 
 export function Footer() {
-    const footerLinks = {
-        product: [
-            { name: 'Features', href: '#features' },
-            { name: 'Pricing', href: '#pricing' },
-            { name: 'Integrations', href: '#integrations' },
-            { name: 'How it Works', href: '#how-it-works' },
-        ],
-        resources: [
-            { name: 'Documentation', href: '#' },
-            { name: 'Tutorials', href: '#' },
-            { name: 'Blog', href: '#' },
-            { name: 'Support', href: '#support' },
-        ],
-        company: [
-            { name: 'About Us', href: '#' },
-            { name: 'Careers', href: '#' },
-            { name: 'Contact', href: '#' },
-            { name: 'Privacy Policy', href: '#' },
-            { name: 'Terms of Service', href: '#' },
-        ],
-    };
-
     return (
         <footer className="bg-slate-900 text-slate-300 py-16 px-6">
             <div className="max-w-7xl mx-auto">
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+                <div className="mb-12 flex flex-col items-center text-center">
                     {/* Brand Section */}
-                    <div className="space-y-4">
-                        <div className="flex items-baseline">
+                    <div className="space-y-4 max-w-sm mx-auto">
+                        <div className="flex items-baseline justify-center">
                             <span className="text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-indigo-400 font-momo text-5xl italic font-extrabold leading-none select-none mr-1">
                                 Q
                             </span>
@@ -40,48 +18,6 @@ export function Footer() {
                         <p className="text-sm text-slate-400 leading-relaxed">
                             The intelligent platform for seamless customer flow and queue management.
                         </p>
-                    </div>
-
-                    {/* Product Links */}
-                    <div>
-                        <h3 className="text-white font-semibold mb-4 uppercase text-sm tracking-wider">Product</h3>
-                        <ul className="space-y-3">
-                            {footerLinks.product.map((link) => (
-                                <li key={link.name}>
-                                    <Link href={link.href} className="text-sm hover:text-white transition-colors">
-                                        {link.name}
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    {/* Resources Links */}
-                    <div>
-                        <h3 className="text-white font-semibold mb-4 uppercase text-sm tracking-wider">Resources</h3>
-                        <ul className="space-y-3">
-                            {footerLinks.resources.map((link) => (
-                                <li key={link.name}>
-                                    <Link href={link.href} className="text-sm hover:text-white transition-colors">
-                                        {link.name}
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    {/* Company Links */}
-                    <div>
-                        <h3 className="text-white font-semibold mb-4 uppercase text-sm tracking-wider">Company</h3>
-                        <ul className="space-y-3">
-                            {footerLinks.company.map((link) => (
-                                <li key={link.name}>
-                                    <Link href={link.href} className="text-sm hover:text-white transition-colors">
-                                        {link.name}
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
                     </div>
                 </div>
 

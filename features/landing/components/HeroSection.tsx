@@ -62,10 +62,7 @@ export function HeroSection() {
                         {/* Decorative Elements behind Q */}
                         <motion.div
                             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-blue-400/20 rounded-full blur-[100px] pointer-events-none"
-                            animate={{
-                                scale: [1, 1.1, 1],
-                                opacity: [0.2, 0.3, 0.2],
-                            }}
+
                             transition={{
                                 duration: 4,
                                 repeat: Infinity,
@@ -75,14 +72,6 @@ export function HeroSection() {
 
                         <motion.div
                             className="mb-8 relative group"
-                            animate={{
-                                y: [0, -10, 0],
-                            }}
-                            transition={{
-                                duration: 3,
-                                repeat: Infinity,
-                                ease: "easeInOut"
-                            }}
                             initial={{ opacity: 0, scale: 0.8 }}
                             whileInView={{ opacity: 1, scale: 1 }}
                             viewport={{ once: true }}
@@ -199,14 +188,6 @@ export function HeroSection() {
                                     </Button>
                                 </motion.div>
                             </Link>
-                            <motion.div
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                            >
-                                <Button variant="secondary" size="lg">
-                                    Request a Demo
-                                </Button>
-                            </motion.div>
                         </motion.div>
 
                         {/* Stats or Features */}

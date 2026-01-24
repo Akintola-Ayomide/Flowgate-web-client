@@ -21,14 +21,11 @@ export function Header() {
                         <Link href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             Features
                         </Link>
-                        <Link href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Pricing
-                        </Link>
                         <Link href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
                             How it works
                         </Link>
-                        <Link href="#support" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                            Support
+                        <Link href="#download" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                            Download App
                         </Link>
                     </nav>
 

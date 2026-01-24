@@ -6,13 +6,13 @@ export function HowItWorksSection() {
     const steps = [
         {
             number: 1,
-            title: 'Customer Scans QR Code',
-            description: 'Customers scan a QR code at your entrance or on your website. No application download is required, making it frictionless and instantly accessible.',
+            title: 'Customer Joins via App or Web',
+            description: 'Customers access queues directly through the Qline website or mobile application. No complex setup required, they can browse available queues and join instantly.',
         },
         {
             number: 2,
-            title: 'Joins Virtual Queue',
-            description: 'After a quick, customizable registration, they are added to the virtual queue. They can monitor their position in real-time from their own device.',
+            title: 'Get QR Code & Virtual Ticket',
+            description: 'After joining, they receive a unique QR code and virtual ticket. This code is scanned by staff when it is their turn to be served.',
         },
         {
             number: 3,
@@ -142,7 +142,7 @@ export function HowItWorksSection() {
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-slate-900">Scan to Join</p>
+                                    <p className="text-sm font-semibold text-slate-900">Login to Join</p>
                                     <p className="text-xs text-slate-500">No app needed</p>
                                 </div>
                             </motion.div>

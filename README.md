@@ -6,6 +6,7 @@
 
 ### 🔐 Authentication & Security
 - **Secure Cookie-Based Auth**: Fully implemented HTTP-only cookie authentication for maximum security (XSS protection).
+- **Password Reset**: Forgot password flow with email-based token verification and secure reset forms.
 - **Google OAuth Integration**: Native-feel "Continue with Google" flow with a dedicated loading state and callback handling (`/auth/callback`).
 - **Robust State Management**: Global `AuthProvider` context managing user sessions, loading states, and automatic profile fetching.
 - **Advanced Error Handling**: Custom `ApiError` class handling structured backend errors, providing clear feedback to users (e.g., validation issues, invalid credentials).
@@ -41,11 +42,14 @@
 ```
 web-frontend/
 ├── app/                  # Next.js App Router (Pages & Layouts)
-│   ├── auth/             # Auth pages (e.g., Callback)
+│   ├── auth/             # Auth pages
+│   │   ├── callback/     # OAuth callback
+│   │   ├── forgot-password/  # Forgot password form
+│   │   └── reset-password/   # Reset password form
 │   └── page.tsx          # Home page (Landing Page)
 ├── features/             # Feature-based modules
 │   ├── auth/             # Authentication logic & UI
-│   │   ├── components/
+│   │   ├── components/   # LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordForm
 │   │   ├── context/
 │   │   └── services/
 │   └── landing/          # Landing Page sections
@@ -90,5 +94,7 @@ This frontend is designed to consume a standard REST API with secure cookie supp
     - `POST /auth/login` (Returns 200 + Set-Cookie)
     - `POST /auth/register` (Returns 200 + Set-Cookie)
     - `POST /auth/logout` (Clears Cookies)
+    - `POST /auth/forgot-password` (Sends reset email)
+    - `POST /auth/reset-password` (Resets password with token)
     - `GET /auth/profile`
     - `GET /auth/google` (Redirects to Provider)

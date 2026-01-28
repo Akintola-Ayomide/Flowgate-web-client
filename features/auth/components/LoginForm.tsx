@@ -1,4 +1,5 @@
 import * as React from 'react';
+import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -73,9 +74,9 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
                             <label htmlFor="password-field" className="text-sm font-semibold text-gray-700 leading-none">
                                 Password
                             </label>
-                            <a href="#" className="text-sm font-semibold text-blue-600 hover:text-blue-500">
+                            <Link href="/auth/forgot-password" className="text-sm font-semibold text-blue-600 hover:text-blue-500">
                                 Forgot password?
-                            </a>
+                            </Link>
                         </div>
                         <div className="relative">
                             <Input

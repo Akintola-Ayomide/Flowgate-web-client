@@ -81,6 +81,20 @@ class AuthService {
     initiateGoogleLogin() {
         window.location.href = `${API_BASE}/auth/google`;
     }
+
+    async requestPasswordReset(email: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    }
+
+    async resetPassword(token: string, password: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>('/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ token, password }),
+        });
+    }
 }
 
 export const authApi = new AuthService();

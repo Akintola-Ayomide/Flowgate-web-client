@@ -1,6 +1,16 @@
 import { LoginDTO, SignupDTO, AuthResponse, User } from '../types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const getApiBaseUrl = (): string => {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+    }
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('NEXT_PUBLIC_API_URL is not defined in environment variables');
+    }
+    return 'http://localhost:8000';
+};
+
+const API_BASE = getApiBaseUrl();
 
 export class ApiError extends Error {
     constructor(

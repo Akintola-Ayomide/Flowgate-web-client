@@ -14,7 +14,7 @@ export default function AuthCallbackPage() {
         if (!isLoading) {
             if (user) {
                 // Successful login
-                router.push('/');
+                router.replace('/dashboard');
             } else {
                 // Failed to verify user after callback
                 // This could happen if cookie setting failed or backend returned 401

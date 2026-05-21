@@ -49,7 +49,7 @@ class AuthService {
                 response.status,
                 errorData.message || 'API request failed',
                 errorData.code,
-                errorData.errors // Assuming backend might send validation errors here
+                errorData.details || errorData.errors // Fallback to errors if details is not present
             );
         }
 

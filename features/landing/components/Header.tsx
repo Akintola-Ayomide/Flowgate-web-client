@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { Button } from '@/shared/ui/button';
+import { useAuth } from '@/features/auth/context/auth-context';
 
 export function Header() {
+    const { user, isLoading } = useAuth();
+
     return (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
             <div className="max-w-7xl mx-auto px-6 py-4">
@@ -31,16 +34,26 @@ export function Header() {
 
                     {/* Auth Buttons */}
                     <div className="flex items-center gap-3">
-                        <Link href="/auth">
-                            <Button variant="ghost" size="default">
-                                Log in
-                            </Button>
-                        </Link>
-                        <Link href="/auth">
-                            <Button variant="primary" size="default">
-                                Sign Up
-                            </Button>
-                        </Link>
+                        {user && !isLoading ? (
+                            <Link href="/dashboard">
+                                <Button variant="primary" size="default">
+                                    Go to Dashboard
+                                </Button>
+                            </Link>
+                        ) : (
+                            <>
+                                <Link href="/auth">
+                                    <Button variant="ghost" size="default">
+                                        Log in
+                                    </Button>
+                                </Link>
+                                <Link href="/auth">
+                                    <Button variant="primary" size="default">
+                                        Sign Up
+                                    </Button>
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

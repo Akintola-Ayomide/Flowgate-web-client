@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
 export function HowItWorksSection() {
     const steps = [
@@ -21,7 +21,7 @@ export function HowItWorksSection() {
         },
     ];
 
-    const containerVariants = {
+    const containerVariants: Variants = {
         hidden: { opacity: 0 },
         visible: {
             opacity: 1,
@@ -31,7 +31,7 @@ export function HowItWorksSection() {
         },
     };
 
-    const itemVariants = {
+    const itemVariants: Variants = {
         hidden: { opacity: 0, x: -30 },
         visible: {
             opacity: 1,

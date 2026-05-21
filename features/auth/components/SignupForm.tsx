@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { useAuth } from '../context/auth-context';
@@ -12,6 +13,7 @@ interface SignupFormProps {
 
 export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
     const { signup, isLoading: isAuthLoading, loginWithGoogle } = useAuth();
+    const router = useRouter();
     const [isLoading, setIsLoading] = React.useState(false);
     const [showPassword, setShowPassword] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -29,8 +31,7 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
 
         try {
             await signup(formData);
-            alert('Account created! Please log in.');
-            onSwitchToLogin();
+            router.push('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Could not create account. Please try again.');
         } finally {

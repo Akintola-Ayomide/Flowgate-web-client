@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
 export function FeaturesSection() {
     const features = [
@@ -61,7 +61,7 @@ export function FeaturesSection() {
         },
     ];
 
-    const containerVariants = {
+    const containerVariants: Variants = {
         hidden: { opacity: 0 },
         visible: {
             opacity: 1,
@@ -77,9 +77,9 @@ export function FeaturesSection() {
         visible: {
             opacity: 1,
             y: 0,
-            transition: { duration: 0.5, ease: 'easeOut' },
+            transition: { duration: 0.5, ease: 'easeOut' as const },
         },
-    };
+    } satisfies Variants;
 
     return (
         <section id="features" className="py-20 px-6 bg-gradient-to-b from-white to-blue-50/30">

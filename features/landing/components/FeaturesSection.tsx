@@ -72,14 +72,14 @@ export function FeaturesSection() {
         },
     };
 
-    const itemVariants: Variants = {
+    const itemVariants = {
         hidden: { opacity: 0, y: 20 },
         visible: {
             opacity: 1,
             y: 0,
-            transition: { duration: 0.5, ease: 'easeOut' },
+            transition: { duration: 0.5, ease: 'easeOut' as const },
         },
-    };
+    } satisfies Variants;
 
     return (
         <section id="features" className="py-20 px-6 bg-gradient-to-b from-white to-blue-50/30">

@@ -18,6 +18,7 @@ export class ApiError extends Error {
         public statusCode: number,
         message: string,
         public code?: string,
+        public details?: any
     ) {
         super(message);
         this.name = 'ApiError';
@@ -47,6 +48,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
             response.status,
             errorData.message || 'Request failed',
             errorData.code,
+            errorData.details || errorData.errors
         );
     }
 

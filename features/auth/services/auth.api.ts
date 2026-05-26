@@ -1,13 +1,8 @@
 import { LoginDTO, SignupDTO, AuthResponse, User } from '../types';
 
 const getApiBaseUrl = (): string => {
-    if (process.env.NEXT_PUBLIC_API_URL) {
-        return process.env.NEXT_PUBLIC_API_URL;
-    }
-    if (process.env.NODE_ENV === 'production') {
-        throw new Error('NEXT_PUBLIC_API_URL is not defined in environment variables');
-    }
-    return 'http://localhost:8000';
+    // Proxy all requests through Next.js to avoid cross-origin cookie issues
+    return '/api';
 };
 
 const API_BASE = getApiBaseUrl();

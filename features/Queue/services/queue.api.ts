@@ -5,10 +5,8 @@
  */
 
 const getApiBaseUrl = (): string => {
-    if (process.env.NEXT_PUBLIC_API_URL) {
-        return process.env.NEXT_PUBLIC_API_URL;
-    }
-    return 'http://localhost:8000';
+    // Proxy all requests through Next.js to avoid cross-origin cookie issues
+    return '/api';
 };
 
 const API_BASE = getApiBaseUrl();

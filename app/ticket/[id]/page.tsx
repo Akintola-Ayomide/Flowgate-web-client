@@ -1,9 +1,10 @@
-"use client"
+"use client";
 
-import React, { useEffect, useState, useRef } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api"
-import { Loader2, ArrowLeft, QrCode, Bell, BellOff, AlertTriangle } from "lucide-react"
+import { io } from "socket.io-client";
+import React, { useEffect, useState, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api";
+import { Loader2, ArrowLeft, QrCode, Bell, BellOff, AlertTriangle } from "lucide-react";
 
 export default function TicketPage() {
     const params = useParams()
@@ -15,7 +16,7 @@ export default function TicketPage() {
     const [queueId, setQueueId] = useState<number | null>(null)
     const [qrToken, setQrToken] = useState<string>("")
     const [notifyOnTurn, setNotifyOnTurn] = useState(false)
-    const intervalRef = useRef<NodeJS.Timeout | null>(null)
+    const socketRef = useRef<any>(null);
 
     useEffect(() => {
         const initialize = async () => {
@@ -50,29 +51,32 @@ export default function TicketPage() {
     }, [entryId])
 
     useEffect(() => {
-        if (!queueId) return
-
-        intervalRef.current = setInterval(async () => {
+        if (!queueId) return;
+        // Initialize socket connection
+        const socket = io();
+        socketRef.current = socket;
+        // Join the specific queue room for real-time updates
+        socket.emit('joinQueueRoom', { queueId });
+        const fetchStatus = async () => {
             try {
-                const status = await queueApi.getQueueStatus(queueId)
-                setStatusData(status)
-
-                if (status.peopleAhead !== undefined && status.peopleAhead <= 2 && notifyOnTurn) {
-                    if (status.peopleAhead === 0) {
-                        alert("It's Your Turn! Please proceed to the counter.")
-                    } else {
-                        console.log(`Almost There! Only ${status.peopleAhead} people ahead of you.`)
-                    }
-                }
+                const status = await queueApi.getQueueStatus(queueId);
+                setStatusData(status);
             } catch (err) {
-                console.warn("Status poll failed:", err)
+                console.warn('Failed to fetch queue status via socket update:', err);
             }
-        }, 10000)
-
+        };
+        // Listen for relevant events and refresh status
+        socket.on('queueShifted', fetchStatus);
+        socket.on('nextServed', fetchStatus);
+        socket.on('userPrioritized', fetchStatus);
+        socket.on('userJoined', fetchStatus);
+        socket.on('userLeft', fetchStatus);
+        // Initial fetch
+        fetchStatus();
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current)
-        }
-    }, [queueId, notifyOnTurn])
+            socket.disconnect();
+        };
+    }, [queueId]);
 
     const handleLeaveQueue = async () => {
         if (!confirm("Are you sure you want to leave this queue? You will lose your spot.")) return

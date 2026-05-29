@@ -3,17 +3,22 @@
 import React, { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { queueApi, Queue } from "@/features/Queue/services/queue.api"
-import { Loader2, ArrowLeft, Users, Clock, Info } from "lucide-react"
+import { Loader2, ArrowLeft, Users, Clock, Info } from "lucide-react";
+import { useAuth } from "@/features/auth/context/auth-context"
 
 export default function JoinQueuePage() {
     const params = useParams()
     const router = useRouter()
     const queueId = Number(params.id)
+    const { user, isAuthenticated, loginGuest } = useAuth();
     
-    const [queue, setQueue] = useState<Queue | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [isJoining, setIsJoining] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [queue, setQueue] = useState<Queue | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isJoining, setIsJoining] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [guestName, setGuestName] = useState<string>('');
+    const [guestPhone, setGuestPhone] = useState<string>('');
+    const [customData, setCustomData] = useState<Record<string, any>>({});
 
     useEffect(() => {
         queueApi.getQueue(queueId)
@@ -23,17 +28,23 @@ export default function JoinQueuePage() {
     }, [queueId])
 
     const handleJoin = async () => {
-        if (!queue) return
-        setIsJoining(true)
-        try {
-            const result = await queueApi.joinQueue(queue.id)
-            router.replace(`/ticket/${result.entry.id}`)
-        } catch (err: any) {
-            alert(err.message || "Failed to join queue.")
-        } finally {
-            setIsJoining(false)
+    if (!queue) return;
+    setIsJoining(true);
+    try {
+        // If user is not authenticated, perform guest login
+        if (!isAuthenticated) {
+            await loginGuest(guestName, guestPhone);
         }
+        // Prepare custom data for joining queue
+        const data = { ...customData };
+        const result = await queueApi.joinQueue(queue.id, data);
+        router.replace(`/ticket/${result.entry.id}`);
+    } catch (err: any) {
+        alert(err.message || "Failed to join queue.");
+    } finally {
+        setIsJoining(false);
     }
+};
 
     if (isLoading) {
         return (

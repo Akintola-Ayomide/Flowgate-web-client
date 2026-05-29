@@ -70,6 +70,14 @@ class AuthService {
         });
     }
 
+    // Guest login endpoint
+    async loginGuest(name: string, phone?: string): Promise<AuthResponse> {
+        return this.request<AuthResponse>('/auth/guest', {
+            method: 'POST',
+            body: JSON.stringify({ name, phone }),
+        });
+    }
+
     async getProfile(): Promise<User> {
         return this.request<User>('/auth/profile');
     }

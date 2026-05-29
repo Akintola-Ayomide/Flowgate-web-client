@@ -27,7 +27,7 @@ export default function ManageQueuePage() {
       setIsLoading(true);
       try {
         const [queueData, participantsData] = await Promise.all([
-          queueApi.getById(queueId),
+          queueApi.getQueue(queueId),
           queueApi.getParticipants(queueId),
         ]);
         setQueue(queueData);
@@ -52,7 +52,7 @@ export default function ManageQueuePage() {
     const refresh = async () => {
       try {
         const [q, p] = await Promise.all([
-          queueApi.getById(queueId),
+          queueApi.getQueue(queueId),
           queueApi.getParticipants(queueId),
         ]);
         setQueue(q);
@@ -76,7 +76,7 @@ export default function ManageQueuePage() {
     if (!queue) return;
     const newStatus = !queueActive;
     try {
-      await queueApi.updateQueueStatus(queue.id, newStatus ? "active" : "paused");
+      await queueApi.updateStatus(queue.id, newStatus ? "active" : "paused");
       setQueueActive(newStatus);
     } catch (e) {
       alert("Failed to update queue status");

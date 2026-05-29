@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useRouter, useParams } from "next/navigation";
-import { Loader2, AlertTriangle, ArrowLeft, Play, Pause, EllipsisVertical, RefreshCw, Person } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowLeft, Play, Pause, EllipsisVertical, RefreshCw, PersonStanding } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
 
@@ -191,7 +191,7 @@ export default function ManageQueuePage() {
         <h2 className="mb-3 text-lg font-semibold text-gray-800">Next Up ({activeCount})</h2>
         {participants.length === 0 ? (
           <div className="flex flex-col items-center rounded-3xl bg-white p-8 shadow-sm border border-gray-200">
-            <Person className="h-12 w-12 text-gray-400" />
+            <PersonStanding className="h-12 w-12 text-gray-400" />
             <p className="mt-4 text-lg font-medium text-gray-800">No one waiting</p>
             <p className="mt-2 text-center text-sm text-gray-500">When users join, they'll appear here.</p>
           </div>

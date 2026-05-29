@@ -69,7 +69,9 @@ export default function ManageQueuePage() {
     socket.on("userJoined", refresh);
     socket.on("userLeft", refresh);
 
-    return () => socket.disconnect();
+    return () => {
+    socket.disconnect();
+  };
   }, [queueId]);
 
   const toggleQueueStatus = async () => {

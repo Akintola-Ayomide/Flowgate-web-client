@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { cn } from "@/shared/lib/utils";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
 
 export default function ManageQueuePage() {

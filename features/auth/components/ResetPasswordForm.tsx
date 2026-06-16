@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { authApi, ApiError } from '../services/auth.api';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
+import Link from 'next/link';
 
 export function ResetPasswordForm() {
     const searchParams = useSearchParams();
@@ -42,7 +43,6 @@ export function ResetPasswordForm() {
 
         try {
             await authApi.resetPassword(token, password);
-            // Success - redirect to login
             router.push('/auth?reset=success');
         } catch (err) {
             if (err instanceof ApiError) {
@@ -58,19 +58,19 @@ export function ResetPasswordForm() {
     if (!token && error) {
         return (
             <div className="w-full max-w-md space-y-6">
-                <div className="text-center space-y-2">
-                    <h1 className="text-3xl font-bold text-slate-900">Reset Password</h1>
+                <div className="text-left space-y-1">
+                    <h1 className="text-2xl font-display font-bold text-foreground">Reset Password</h1>
                 </div>
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-800 text-sm">{error}</p>
+                <div className="p-3 bg-destructive/5 border border-destructive/10 rounded-md">
+                    <p className="text-destructive text-xs font-medium">{error}</p>
                 </div>
                 <div className="text-center">
-                    <a
+                    <Link
                         href="/auth/forgot-password"
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        className="text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors"
                     >
                         Request New Reset Link →
-                    </a>
+                    </Link>
                 </div>
             </div>
         );
@@ -78,55 +78,46 @@ export function ResetPasswordForm() {
 
     return (
         <div className="w-full max-w-md space-y-6">
-            <div className="text-center space-y-2">
-                <h1 className="text-3xl font-bold text-slate-900">Set New Password</h1>
-                <p className="text-slate-600">
+            <div className="text-left space-y-1">
+                <h1 className="text-2xl font-display font-bold text-foreground">Set New Password</h1>
+                <p className="text-sm text-muted-foreground font-medium">
                     Please enter your new password below.
                 </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
-                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-red-800 text-sm">{error}</p>
+                    <div className="p-3 bg-destructive/5 border border-destructive/10 rounded-md">
+                        <p className="text-destructive text-xs font-medium">{error}</p>
                     </div>
                 )}
 
-                <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5">
-                        New Password
-                    </label>
-                    <Input
-                        id="password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter new password"
-                        required
-                        disabled={isLoading}
-                        minLength={6}
-                    />
-                </div>
+                <Input
+                    id="password"
+                    label="New Password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    required
+                    disabled={isLoading}
+                    minLength={6}
+                />
 
-                <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Confirm Password
-                    </label>
-                    <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm new password"
-                        required
-                        disabled={isLoading}
-                        minLength={6}
-                    />
-                </div>
+                <Input
+                    id="confirmPassword"
+                    label="Confirm Password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    required
+                    disabled={isLoading}
+                    minLength={6}
+                />
 
                 <Button
                     type="submit"
-                    variant="primary"
                     size="lg"
                     className="w-full"
                     disabled={isLoading || !password || !confirmPassword}
@@ -136,12 +127,12 @@ export function ResetPasswordForm() {
             </form>
 
             <div className="text-center">
-                <a
+                <Link
                     href="/auth"
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    className="text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors"
                 >
                     ← Back to Login
-                </a>
+                </Link>
             </div>
         </div>
     );

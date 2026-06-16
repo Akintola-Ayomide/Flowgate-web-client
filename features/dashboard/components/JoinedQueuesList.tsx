@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api"
-import { Loader2, ArrowRight, QrCode } from "lucide-react"
+import { Loader2, QrCode } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export function JoinedQueuesList() {
@@ -19,37 +19,38 @@ export function JoinedQueuesList() {
 
     if (isLoading) {
         return (
-            <div className="flex justify-center items-center h-32 bg-white rounded-xl border border-gray-200">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <div className="flex justify-center items-center h-32 bg-background border border-border/80 rounded-md shadow-xs">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
         )
     }
 
     if (joined.length === 0) {
-        return null; // Don't show the section if no joined queues
+        return null;
     }
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Your Active Tickets</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="bg-background border border-border/80 rounded-md p-6 mb-6 shadow-xs relative overflow-hidden">
+            <div className="absolute inset-0 dot-grid opacity-[0.1] pointer-events-none" />
+            <h2 className="font-display text-xs font-bold tracking-wider text-muted-foreground uppercase mb-4 relative z-10">Your Active Tickets</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 relative z-10">
                 {joined.map(({ entry, queue }) => (
-                    <div key={entry.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-colors flex flex-col justify-between">
-                        <div>
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-semibold text-gray-900">{queue.name}</h3>
-                                <div className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded-md">
+                    <div key={entry.id} className="border border-border/80 bg-secondary/30 rounded-md p-4 hover:border-primary/40 transition-colors duration-200 flex flex-col justify-between group">
+                        <div className="mb-4">
+                            <div className="flex justify-between items-start gap-2 mb-2">
+                                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors text-sm truncate">{queue.name}</h3>
+                                <div className="bg-primary/10 text-primary border border-primary/20 text-xs font-bold px-2 py-0.5 rounded-sm shrink-0">
                                     #{entry.position}
                                 </div>
                             </div>
-                            <p className="text-sm text-gray-500 mb-4">Joined at {new Date(entry.joinedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            <p className="text-xs text-muted-foreground">Joined at {new Date(entry.joinedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                         </div>
                         <button
                             onClick={() => router.push(`/ticket/${entry.id}`)}
-                            className="w-full flex items-center justify-center py-2 px-4 border border-gray-200 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                            className="w-full flex items-center justify-center py-2 px-4 border border-border rounded-md text-xs font-bold text-foreground bg-background hover:bg-secondary transition-colors cursor-pointer"
                         >
-                            <QrCode className="h-4 w-4 mr-2 text-gray-400" />
-                            View Ticket
+                            <QrCode className="h-3.5 w-3.5 mr-2 text-muted-foreground group-hover:text-primary transition-colors" />
+                            <span>View Ticket</span>
                         </button>
                     </div>
                 ))}

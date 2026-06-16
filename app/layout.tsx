@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/features/auth/context/auth-context";
+import { ThemeProvider } from "@/shared/context/theme-context";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const sans = Plus_Jakarta_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const display = DM_Sans({
+  variable: "--font-display",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Qline",
-  description: "Smart Queue Management System",
+  title: "Flowgate — Premium Queue & Flow Management",
+  description: "Eliminate wait times, optimize customer flow, and scale operations with Flowgate's warm industrial, high-precision queue management platform.",
 };
 
 export default function RootLayout({
@@ -24,13 +27,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${sans.variable} ${display.variable} antialiased bg-background text-foreground`}
       >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <div className="grain-overlay" />
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

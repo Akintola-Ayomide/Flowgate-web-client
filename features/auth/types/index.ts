@@ -3,12 +3,12 @@ export interface User {
     email: string;
     name: string;
     avatar: string | null;
-    provider?: 'local' | 'google';
+    provider?: 'local' | 'google' | 'guest';
 }
 
 export interface LoginDTO {
     email: string;
-    password?: string; // Optional because in the UI "Email / Username" is one field
+    password?: string;
 }
 
 export interface SignupDTO {
@@ -17,9 +17,10 @@ export interface SignupDTO {
     password?: string;
 }
 
+/** Matches the exact shape returned by the NestJS backend */
 export interface AuthResponse {
     user: User;
-    token?: string;
+    accessToken: string;
 }
 
 export type AuthMode = 'login' | 'signup';

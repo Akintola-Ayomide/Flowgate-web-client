@@ -1,0 +1,15 @@
+/* Theme utility classes using CSS variables */
+.bg-background { background-color: var(--background) !important; }
+.text-foreground { color: var(--foreground) !important; }
+.border-border { border-color: var(--border) !important; }
+.bg-primary { background-color: var(--primary) !important; }
+.text-primary-foreground { color: var(--primary-foreground) !important; }
+.bg-secondary { background-color: var(--secondary) !important; }
+.text-secondary-foreground { color: var(--secondary-foreground) !important; }
+.bg-accent { background-color: var(--accent) !important; }
+.text-accent-foreground { color: var(--accent-foreground) !important; }
+.bg-muted { background-color: var(--muted) !important; }
+.text-muted-foreground { color: var(--muted-foreground) !important; }
+.bg-input { background-color: var(--input) !important; }
+.ring-primary { --tw-ring-color: var(--primary) !important; }
+.shadow-glow { box-shadow: var(--shadow-glow) !important; }

@@ -19,7 +19,7 @@ export function ForgotPasswordForm() {
         setSuccess(false);
 
         try {
-            const response = await authApi.requestPasswordReset(email);
+            await authApi.requestPasswordReset(email);
             setSuccess(true);
             setEmail('');
         } catch (err) {
@@ -35,45 +35,40 @@ export function ForgotPasswordForm() {
 
     return (
         <div className="w-full max-w-md space-y-6">
-            <div className="text-center space-y-2">
-                <h1 className="text-3xl font-bold text-slate-900">Forgot Password?</h1>
-                <p className="text-slate-600">
+            <div className="text-left space-y-1">
+                <h1 className="text-2xl font-display font-bold text-foreground">Forgot Password?</h1>
+                <p className="text-sm text-muted-foreground font-medium">
                     Enter your email address and we'll send you a link to reset your password.
                 </p>
             </div>
 
             {success ? (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-800 text-sm">
+                <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-md">
+                    <p className="text-green-500 text-xs font-semibold">
                         If an account with that email exists, a password reset link has been sent. Please check your inbox.
                     </p>
                 </div>
             ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {error && (
-                        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-red-800 text-sm">{error}</p>
+                        <div className="p-3 bg-destructive/5 border border-destructive/10 rounded-md">
+                            <p className="text-destructive text-xs font-medium">{error}</p>
                         </div>
                     )}
 
-                    <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">
-                            Email Address
-                        </label>
-                        <Input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@example.com"
-                            required
-                            disabled={isLoading}
-                        />
-                    </div>
+                    <Input
+                        id="email"
+                        label="Email Address"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        required
+                        disabled={isLoading}
+                    />
 
                     <Button
                         type="submit"
-                        variant="primary"
                         size="lg"
                         className="w-full"
                         disabled={isLoading || !email}
@@ -86,7 +81,7 @@ export function ForgotPasswordForm() {
             <div className="text-center">
                 <Link
                     href="/auth"
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    className="text-xs text-primary hover:text-primary/80 font-bold transition-colors"
                 >
                     ← Back to Login
                 </Link>

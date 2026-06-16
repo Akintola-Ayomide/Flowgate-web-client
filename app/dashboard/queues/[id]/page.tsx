@@ -1,11 +1,15 @@
-// "use client"
 "use client";
 
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { useRouter, useParams } from "next/navigation";
-import { Loader2, AlertTriangle, ArrowLeft, Play, Pause, EllipsisVertical, RefreshCw, PersonStanding } from "lucide-react";
+import { 
+  Loader2, AlertTriangle, ArrowLeft, Play, Pause, 
+  EllipsisVertical, RefreshCw, Users, Camera, Plus, 
+  Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle 
+} from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
 
 export default function ManageQueuePage() {
@@ -20,25 +24,44 @@ export default function ManageQueuePage() {
   const [queueActive, setQueueActive] = useState(true);
   const socketRef = useRef<any>(null);
 
+  // Modals / Overlays states
+  const [showScanner, setShowScanner] = useState(false);
+  const [showAddGuest, setShowAddGuest] = useState(false);
+  const [prioritizingEntry, setPrioritizingEntry] = useState<QueueEntry | null>(null);
+  const [targetPosition, setTargetPosition] = useState<number>(1);
+
+  // Scanner states
+  const [cameraActive, setCameraActive] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [isVerifyingToken, setIsVerifyingToken] = useState(false);
+  const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Walk-in guest states
+  const [guestName, setGuestName] = useState("");
+  const [isAddingGuest, setIsAddingGuest] = useState(false);
+  const [addGuestError, setAddGuestError] = useState<string | null>(null);
+
   // Initial data fetch
-  useEffect(() => {
+  const fetchData = async () => {
     if (isNaN(queueId)) return;
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [queueData, participantsData] = await Promise.all([
-          queueApi.getQueue(queueId),
-          queueApi.getParticipants(queueId),
-        ]);
-        setQueue(queueData);
-        setQueueActive(queueData.status === "active");
-        setParticipants(participantsData);
-      } catch (e) {
-        console.warn("Failed to load queue data", e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    try {
+      const [queueData, participantsData] = await Promise.all([
+        queueApi.getQueue(queueId),
+        queueApi.getParticipants(queueId),
+      ]);
+      setQueue(queueData);
+      setQueueActive(queueData.status === "active");
+      setParticipants(participantsData);
+    } catch (e) {
+      console.warn("Failed to load queue data", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [queueId]);
 
@@ -49,29 +72,15 @@ export default function ManageQueuePage() {
     socketRef.current = socket;
     socket.emit("joinQueueRoom", { queueId });
 
-    const refresh = async () => {
-      try {
-        const [q, p] = await Promise.all([
-          queueApi.getQueue(queueId),
-          queueApi.getParticipants(queueId),
-        ]);
-        setQueue(q);
-        setQueueActive(q.status === "active");
-        setParticipants(p);
-      } catch (e) {
-        console.warn("Failed to refresh via socket", e);
-      }
-    };
-
-    socket.on("queueShifted", refresh);
-    socket.on("nextServed", refresh);
-    socket.on("userPrioritized", refresh);
-    socket.on("userJoined", refresh);
-    socket.on("userLeft", refresh);
+    socket.on("queueShifted", fetchData);
+    socket.on("nextServed", fetchData);
+    socket.on("userPrioritized", fetchData);
+    socket.on("userJoined", fetchData);
+    socket.on("userLeft", fetchData);
 
     return () => {
-    socket.disconnect();
-  };
+      socket.disconnect();
+    };
   }, [queueId]);
 
   const toggleQueueStatus = async () => {
@@ -90,7 +99,6 @@ export default function ManageQueuePage() {
     setIsServing(true);
     try {
       await queueApi.serveNext(queue.id);
-      // participants will refresh via socket event
     } catch (e) {
       alert("Failed to serve next user");
     } finally {
@@ -98,32 +106,152 @@ export default function ManageQueuePage() {
     }
   };
 
-  const prioritizeUser = async (userId: number) => {
+  const handlePrioritizeUser = async (userId: number, pos: number) => {
     if (!queue) return;
     try {
-      await queueApi.prioritizeUser(queue.id, userId, 1);
-      // refreshed via socket
+      await queueApi.prioritizeUser(queue.id, userId, pos);
+      setPrioritizingEntry(null);
+      fetchData(); // Trigger manual refresh in case socket takes time
     } catch (e) {
       alert("Failed to prioritize user");
     }
   };
 
+  // Walk-in Guest register & join flow
+  const handleAddGuestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestName.trim()) return;
+    setIsAddingGuest(true);
+    setAddGuestError(null);
+
+    try {
+      // 1. Backend Guest register
+      const response = await fetch("/api/auth/guest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: guestName.trim() }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to register walk-in guest user.");
+      }
+      
+      const guestData = await response.json();
+
+      // 2. Join queue using guest token in Bearer Auth header
+      const joinResponse = await fetch("/api/queues/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${guestData.accessToken}`
+        },
+        body: JSON.stringify({ queueId }),
+      });
+
+      if (!joinResponse.ok) {
+        throw new Error("Failed to join guest to queue.");
+      }
+
+      setGuestName("");
+      setShowAddGuest(false);
+      fetchData();
+    } catch (err: any) {
+      setAddGuestError(err.message || "Failed to add guest.");
+    } finally {
+      setIsAddingGuest(false);
+    }
+  };
+
+  // Camera scanner actions
+  const startCamera = async () => {
+    setScanResult(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setCameraActive(true);
+      }
+    } catch (err) {
+      console.warn("Failed to get camera access", err);
+      alert("Camera access denied or unavailable.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  };
+
+  const handleOpenScanner = () => {
+    setShowScanner(true);
+    setScanResult(null);
+    setTokenInput("");
+  };
+
+  const handleCloseScanner = () => {
+    stopCamera();
+    setShowScanner(false);
+  };
+
+  const handleVerifyToken = async (token: string) => {
+    if (!token.trim()) return;
+    setIsVerifyingToken(true);
+    setScanResult(null);
+    try {
+      const result = await queueApi.verifyQr(token);
+      setScanResult({
+        success: true,
+        message: `Verify Success! Participant: ${result.user?.name || `ID #${result.userId}`} is at Position #${result.position} in the queue.`
+      });
+      fetchData();
+    } catch (err: any) {
+      setScanResult({
+        success: false,
+        message: err.message || "Ticket verification failed. Code is invalid or expired."
+      });
+    } finally {
+      setIsVerifyingToken(false);
+    }
+  };
+
+  const handleSimulateScan = () => {
+    if (participants.length > 0) {
+      // Simulate with the first user waiting
+      const firstUser = participants[0];
+      handleVerifyToken(firstUser.qrCodeToken);
+    } else {
+      setScanResult({
+        success: false,
+        message: "No participants currently waiting in the queue to simulate verification."
+      });
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+      <div className="min-h-[70vh] flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!queue) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-gray-50 p-4 text-center">
-        <AlertTriangle className="h-16 w-16 text-amber-500 mb-4" />
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Queue Not Found</h1>
-        <button onClick={() => router.back()} className="mt-4 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700">
+      <div className="flex min-h-[70vh] flex-col items-center justify-center bg-background p-4 text-center">
+        <AlertTriangle className="h-12 w-12 text-accent mb-4" />
+        <h1 className="text-xl font-display font-bold text-foreground mb-1">Queue Not Found</h1>
+        <p className="text-sm text-muted-foreground max-w-sm mb-4">The queue you are looking for might have been deleted or does not exist.</p>
+        <Button onClick={() => router.back()} variant="secondary" size="default">
           Go Back
-        </button>
+        </Button>
       </div>
     );
   }
@@ -131,116 +259,408 @@ export default function ManageQueuePage() {
   const activeCount = participants.length;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
-      <div className="mb-6 flex items-center">
-        <button onClick={() => router.back()} className="mr-4 rounded-full bg-gray-200 p-2 hover:bg-gray-300">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">Manage Queue</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center">
+          <button 
+            onClick={() => router.back()} 
+            className="mr-3.5 rounded-md bg-secondary border border-border p-2 text-foreground hover:bg-background transition-colors cursor-pointer"
+            title="Back"
+          >
+            <ArrowLeft className="h-4.5 w-4.5" />
+          </button>
+          <div>
+            <h1 className="text-xl font-display font-bold text-foreground tracking-tight">Manage Queue</h1>
+            <p className="text-muted-foreground text-xs font-medium mt-0.5">Control live participation, verify tickets, and add walk-in users.</p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={handleOpenScanner} 
+            variant="secondary" 
+            className="gap-2 text-xs font-bold uppercase shrink-0"
+          >
+            <Camera className="h-4 w-4 text-muted-foreground" />
+            Verify QR Ticket
+          </Button>
+          <Button 
+            onClick={() => { setShowAddGuest(true); setAddGuestError(null); }} 
+            className="gap-2 text-xs font-bold uppercase shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            Add Walk-in
+          </Button>
+        </div>
       </div>
 
       {/* Meta Card */}
-      <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm border border-gray-200">
-        <div className="flex justify-between border-b pb-4 mb-4">
+      <div className="rounded-md bg-background p-6 border border-border/80 shadow-xs relative overflow-hidden">
+        <div className="absolute inset-0 dot-grid opacity-[0.1] pointer-events-none" />
+        <div className="flex justify-between items-start border-b border-border/60 pb-4 mb-5 relative z-10">
           <div>
-            <h2 className="text-xl font-semibold text-gray-800">{queue.name}</h2>
-            <p className="text-sm text-gray-500">ID: {queue.id}</p>
-            <p className="text-sm text-gray-500">{queue.description}</p>
+            <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{queue.name}</h2>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">ID: {queue.id}</p>
+            {queue.description && (
+              <p className="text-xs text-muted-foreground font-medium mt-1.5 max-w-xl">
+                {/* Check if description contains serialized details */}
+                {queue.description.startsWith("{") ? JSON.parse(queue.description).desc : queue.description}
+              </p>
+            )}
           </div>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-bold ${queueActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
+            className={`rounded-sm border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              queueActive ? "bg-primary/10 text-primary border-primary/20" : "bg-secondary text-muted-foreground border-border/60"
+            }`}
           >
-            {queueActive ? "Open" : "Closed"}
+            {queueActive ? "Active / Open" : "Paused"}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-4 text-center">
-          <div>
-            <p className="text-sm text-gray-500">Waiting</p>
-            <p className="text-2xl font-bold text-primary">{activeCount}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center relative z-10">
+          <div className="bg-secondary/40 border border-border/50 rounded-md py-3.5 px-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">Waiting</p>
+            <p className="text-2xl font-display font-black text-primary tracking-tight">{activeCount}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Served Today</p>
-            <p className="text-2xl font-bold text-primary">{queue.totalToday || 0}</p>
+          <div className="bg-secondary/40 border border-border/50 rounded-md py-3.5 px-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">Served Today</p>
+            <p className="text-2xl font-display font-black text-foreground tracking-tight">{queue.totalToday || 0}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Capacity</p>
-            <p className="text-2xl font-bold text-primary">{queue.maxParticipants}</p>
+          <div className="bg-secondary/40 border border-border/50 rounded-md py-3.5 px-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">Capacity</p>
+            <p className="text-2xl font-display font-black text-foreground tracking-tight">{queue.maxParticipants}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Avg Wait</p>
-            <p className="text-2xl font-bold text-primary">{queue.avgServiceTime}m</p>
+          <div className="bg-secondary/40 border border-border/50 rounded-md py-3.5 px-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">Avg Service</p>
+            <p className="text-2xl font-display font-black text-accent tracking-tight">{queue.avgServiceTime}m</p>
           </div>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="mb-6 flex items-center justify-between rounded-3xl bg-white p-4 shadow-sm border border-gray-200">
-        <div className="flex items-center">
-          {queueActive ? <Play className="h-5 w-5 text-green-600 mr-2" /> : <Pause className="h-5 w-5 text-gray-600 mr-2" />}
-          <span className="font-medium">Accepting Users</span>
+      {/* Controls Card */}
+      <div className="flex items-center justify-between rounded-md bg-background p-4 border border-border/80 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8.5 h-8.5 rounded-md bg-secondary border border-border/60 flex items-center justify-center text-foreground shrink-0">
+            {queueActive ? <Play className="h-4 w-4 text-primary" /> : <Pause className="h-4 w-4 text-accent" />}
+          </div>
+          <div>
+            <span className="font-bold text-xs uppercase tracking-wide text-foreground">Accepting Waitlist Joins</span>
+            <p className="text-[10px] text-muted-foreground font-medium">Toggle whether customers can join this queue</p>
+          </div>
         </div>
+        
+        {/* Toggle Switch */}
         <button
           onClick={toggleQueueStatus}
-          className={`focus:outline-none ${queueActive ? "bg-green-600" : "bg-gray-300"} rounded-full p-1`}
+          className={`focus:outline-none relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+            queueActive ? "bg-primary" : "bg-secondary border border-border/85"
+          }`}
+          aria-label="Toggle Waitlist"
         >
-          {queueActive ? <Pause className="h-5 w-5 text-white" /> : <Play className="h-5 w-5 text-white" />}
+          <span 
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow-xs transition duration-200 ease-in-out ${
+              queueActive ? "translate-x-5 bg-background" : "translate-x-0 bg-muted-foreground"
+            }`} 
+          />
         </button>
       </div>
 
+      {/* AI Insights banner */}
+      <div className="rounded-md border border-primary/20 bg-primary/5 p-4 flex items-start gap-3 relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-accent text-accent-foreground text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-bl-md">
+          Coming Soon
+        </div>
+        <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5 animate-pulse" />
+        <div>
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">AI Queue Operations Insights</h4>
+          <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+            We are building smart queue models that predict peak hour overflows, compute optimal serve speed adjustments, and warn customers about potential delays before they leave home.
+          </p>
+        </div>
+      </div>
+
       {/* Participant List */}
-      <div className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-gray-800">Next Up ({activeCount})</h2>
+      <div className="space-y-3">
+        <h2 className="font-display text-xs font-bold tracking-wider text-muted-foreground uppercase">Next Up ({activeCount})</h2>
         {participants.length === 0 ? (
-          <div className="flex flex-col items-center rounded-3xl bg-white p-8 shadow-sm border border-gray-200">
-            <PersonStanding className="h-12 w-12 text-gray-400" />
-            <p className="mt-4 text-lg font-medium text-gray-800">No one waiting</p>
-            <p className="mt-2 text-center text-sm text-gray-500">When users join, they'll appear here.</p>
+          <div className="flex flex-col items-center justify-center rounded-md bg-background py-16 px-6 border border-border/80 shadow-xs text-center">
+            <Users className="h-10 w-10 text-muted-foreground/60 mb-4" />
+            <p className="text-base font-display font-bold text-foreground">Waitlist is empty</p>
+            <p className="text-xs text-muted-foreground font-medium mt-1">When users scan the code or join online, they will appear here.</p>
           </div>
         ) : (
-          <ul className="space-y-3">
+          <div className="grid gap-3">
             {participants.map((p, idx) => (
-              <li
+              <div
                 key={p.id}
-                className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm border border-gray-200"
+                className="flex items-center justify-between rounded-md bg-background p-4 border border-border/80 shadow-xs hover:border-primary/30 transition-colors"
               >
-                <div className="flex items-center">
+                <div className="flex items-center gap-4 min-w-0">
                   <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full mr-4 ${idx === 0 ? "bg-primary" : "bg-primary/10"}`}
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border font-display font-black text-sm ${
+                      idx === 0 
+                        ? "bg-primary text-primary-foreground border-primary" 
+                        : "bg-secondary text-foreground border-border/60"
+                    }`}
                   >
-                    <span className={`font-bold ${idx === 0 ? "text-primary-foreground" : "text-primary"}`}>{p.position}</span>
+                    <span>{p.position}</span>
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{p.user?.name || `User #${p.userId}`}</p>
-                    <p className="text-sm text-gray-500">Joined {new Date(p.joinedAt).toLocaleTimeString()}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-foreground text-sm truncate">{p.user?.name || `User #${p.userId}`}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">Joined {new Date(p.joinedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => {
-                    if (confirm(`Prioritize ${p.user?.name || "this user"}?`)) {
-                      prioritizeUser(p.userId);
-                    }
+                    setTargetPosition(p.position);
+                    setPrioritizingEntry(p);
                   }}
-                  className="rounded-full bg-gray-100 p-2 hover:bg-gray-200"
+                  className="rounded-md bg-secondary border border-border/60 p-2 text-muted-foreground hover:text-foreground transition-all cursor-pointer hover:bg-background"
+                  title="Prioritize / Move User"
                 >
-                  <EllipsisVertical className="h-5 w-5 text-gray-600" />
+                  <EllipsisVertical className="h-4 w-4" />
                 </button>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 
       {/* Serve Next Button */}
       {participants.length > 0 && (
-        <button
-          onClick={handleServeNext}
-          disabled={isServing}
-          className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {isServing ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <RefreshCw className="mr-2 h-5 w-5" />}
-          Call Next Person
-        </button>
+        <div className="pt-2">
+          <Button
+            onClick={handleServeNext}
+            disabled={isServing}
+            className="w-full h-12 text-xs font-bold uppercase tracking-wider gap-2 shadow-glow"
+            size="lg"
+          >
+            {isServing ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <RefreshCw className="h-4.5 w-4.5" />}
+            <span>Call Next Person</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Verification / QR Camera Modal */}
+      {showScanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-background border border-border rounded-md shadow-lg max-w-md w-full overflow-hidden flex flex-col relative animate-scale-up">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/50">
+              <div className="flex items-center gap-2">
+                <Camera className="h-5 w-5 text-primary" />
+                <h3 className="font-display font-bold text-sm text-foreground">Verify QR Ticket</h3>
+              </div>
+              <button 
+                onClick={handleCloseScanner}
+                className="h-8 w-8 rounded-md border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Tabs / Scan Options */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-md">
+                <button 
+                  onClick={() => { if (!cameraActive) startCamera(); }}
+                  className={cn(
+                    "py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors",
+                    cameraActive ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Camera Stream
+                </button>
+                <button 
+                  onClick={stopCamera}
+                  className={cn(
+                    "py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors",
+                    !cameraActive ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Manual Input
+                </button>
+              </div>
+
+              {/* Viewport for camera or manual form */}
+              {cameraActive ? (
+                <div className="relative aspect-square w-full rounded-md bg-black overflow-hidden border border-border flex items-center justify-center">
+                  <video ref={videoRef} className="w-full h-full object-cover" playsInline />
+                  {/* Laser scan animation overlay */}
+                  <div className="absolute inset-x-0 h-1 bg-primary/80 shadow-[0_0_12px_var(--primary)] top-1/2 -translate-y-1/2 animate-bounce pointer-events-none" />
+                  <div className="absolute inset-4 border-2 border-dashed border-primary/60 rounded-md pointer-events-none" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Input
+                    label="QR Token Code"
+                    placeholder="Enter customer's ticket code token"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    disabled={isVerifyingToken}
+                  />
+                  <Button
+                    onClick={() => handleVerifyToken(tokenInput)}
+                    disabled={isVerifyingToken || !tokenInput.trim()}
+                    className="w-full text-xs font-bold uppercase"
+                  >
+                    {isVerifyingToken ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                    Verify Ticket
+                  </Button>
+                </div>
+              )}
+
+              {/* Simulation Option */}
+              <div className="p-3 bg-secondary border border-border rounded-md space-y-2">
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Verification Testing Simulator</p>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  Testing walk-ins or don't have a device? Click below to automatically grab the first ticket token in the waitlist and verify it.
+                </p>
+                <button
+                  onClick={handleSimulateScan}
+                  disabled={participants.length === 0}
+                  className="w-full py-2 border border-primary/20 hover:border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all disabled:opacity-50"
+                >
+                  Simulate scanning QR code
+                </button>
+              </div>
+
+              {/* Result Indicator */}
+              {scanResult && (
+                <div className={cn(
+                  "p-4 rounded-md border flex items-start gap-3 animate-fade-in",
+                  scanResult.success 
+                    ? "bg-primary/5 border-primary/20 text-primary" 
+                    : "bg-destructive/5 border-destructive/20 text-destructive"
+                )}>
+                  {scanResult.success ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <h5 className="text-xs font-bold uppercase tracking-wider">
+                      {scanResult.success ? "Verification Successful" : "Verification Failed"}
+                    </h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed mt-1">{scanResult.message}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end px-6 py-3 border-t border-border bg-secondary/35">
+              <Button onClick={handleCloseScanner} variant="secondary" className="text-xs font-bold uppercase">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Walk-in Guest Modal */}
+      {showAddGuest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <form onSubmit={handleAddGuestSubmit} className="bg-background border border-border rounded-md shadow-lg max-w-md w-full overflow-hidden flex flex-col relative animate-scale-up">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/50">
+              <div className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-primary" />
+                <h3 className="font-display font-bold text-sm text-foreground">Add Walk-in Customer</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowAddGuest(false)}
+                className="h-8 w-8 rounded-md border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Add a physical walk-in customer who isn't using a phone. This generates a simulated guest waitlist ticket.
+              </p>
+              <Input
+                label="Customer Display Name *"
+                placeholder="e.g. Robert Smith"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                required
+                disabled={isAddingGuest}
+              />
+              {addGuestError && (
+                <div className="p-3 bg-destructive/5 text-destructive text-xs rounded-md border border-destructive/10 font-medium">
+                  {addGuestError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 px-6 py-3 border-t border-border bg-secondary/35">
+              <Button type="button" variant="secondary" onClick={() => setShowAddGuest(false)} className="text-xs font-bold uppercase">
+                Cancel
+              </Button>
+              <Button type="submit" isLoading={isAddingGuest} className="text-xs font-bold uppercase">
+                Add to Waitlist
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Prioritization Position Dialog */}
+      {prioritizingEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-background border border-border rounded-md shadow-lg max-w-sm w-full overflow-hidden flex flex-col relative animate-scale-up">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/50">
+              <div className="flex items-center gap-2">
+                <ArrowUpCircle className="h-5 w-5 text-primary" />
+                <h3 className="font-display font-bold text-sm text-foreground">Reprioritize Position</h3>
+              </div>
+              <button 
+                onClick={() => setPrioritizingEntry(null)}
+                className="h-8 w-8 rounded-md border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground font-semibold">Customer:</p>
+                <p className="font-bold text-foreground text-sm">{prioritizingEntry.user?.name || `User #${prioritizingEntry.userId}`}</p>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Current Position: #{prioritizingEntry.position}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-display text-xs font-medium tracking-wide text-muted-foreground uppercase leading-none">
+                  Choose New Waitlist Position
+                </label>
+                <select
+                  value={targetPosition}
+                  onChange={(e) => setTargetPosition(Number(e.target.value))}
+                  className="w-full rounded-md border border-border bg-secondary px-3 py-2.5 text-xs font-bold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-background transition-all"
+                >
+                  {Array.from({ length: Math.max(participants.length, 1) }, (_, i) => i + 1).map((pos) => (
+                    <option key={pos} value={pos}>
+                      Position #{pos} {pos === 1 ? "(Serve Next)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 px-6 py-3 border-t border-border bg-secondary/35">
+              <Button variant="secondary" onClick={() => setPrioritizingEntry(null)} className="text-xs font-bold uppercase">
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => handlePrioritizeUser(prioritizingEntry.userId, targetPosition)} 
+                className="text-xs font-bold uppercase"
+              >
+                Confirm Move
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

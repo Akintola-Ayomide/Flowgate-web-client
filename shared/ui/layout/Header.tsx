@@ -3,13 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, Search, Plus } from "lucide-react"
-import { Button } from "@/shared/ui/button"
+import { Bell } from "lucide-react"
 import { useAuth } from "@/features/auth/context/auth-context"
+import { ThemeToggle } from "@/features/landing/components/Header"
 
 /** Map route segments to human-readable titles */
 const ROUTE_TITLES: Record<string, string> = {
     "/dashboard": "Dashboard",
+    "/browse": "Browse Queues",
     "/dashboard/queues": "Queues",
     "/dashboard/queues/create": "Create Queue",
     "/dashboard/analytics": "Analytics",
@@ -28,19 +29,16 @@ export function Header() {
         : "?"
 
     return (
-        <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-gray-200 bg-white px-6">
-            <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+        <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border/80 bg-background/80 backdrop-blur-md px-8">
+            <h1 className="text-lg font-display font-bold text-foreground tracking-tight">{title}</h1>
 
             <div className="flex items-center gap-4">
-                {/* Notifications */}
-                <button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors">
-                    <Bell className="h-5 w-5" />
-                </button>
-
+                <ThemeToggle />
+                
                 {/* User avatar */}
                 <Link href="/dashboard/settings">
                     <div
-                        className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                        className="h-8.5 w-8.5 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all ring-1 ring-primary/20"
                         title={user?.name ?? ""}
                     >
                         {user?.avatar ? (

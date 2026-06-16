@@ -18,18 +18,18 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
                         id={checkboxId}
                         type="checkbox"
                         className={cn(
-                            "peer h-5 w-5 shrink-0 appearance-none rounded-md border border-gray-300 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 checked:bg-primary checked:border-primary transition-all cursor-pointer",
+                            "peer h-5 w-5 shrink-0 appearance-none rounded-sm border border-border shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 checked:bg-primary checked:border-primary transition-all duration-200 cursor-pointer",
                             className
                         )}
                         ref={ref}
                         {...props}
                     />
-                    <Check className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
+                    <Check className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-primary-foreground opacity-0 peer-checked:opacity-100 transition-opacity" />
                 </div>
                 {label && (
                     <label
                         htmlFor={checkboxId}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer select-none"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer select-none text-foreground/90"
                     >
                         {label}
                     </label>

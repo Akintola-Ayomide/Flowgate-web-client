@@ -2,14 +2,17 @@
  * @file queue.api.ts
  * @description API service for all queue-related endpoints.
  * Mirrors the backend QueueController surface.
+ *
+ * Token strategy
+ * ──────────────
+ * Every request includes `credentials: 'include'` (for same-domain cookie auth)
+ * AND injects an `Authorization: Bearer` header when a JWT is present in
+ * localStorage (for cross-domain production deployments).
  */
 
-const getApiBaseUrl = (): string => {
-    // Proxy all requests through Next.js to avoid cross-origin cookie issues
-    return '/api';
-};
+import { getToken } from '@/features/auth/services/token.storage';
 
-const API_BASE = getApiBaseUrl();
+const API_BASE = '/api';
 
 export class ApiError extends Error {
     constructor(
@@ -24,10 +27,17 @@ export class ApiError extends Error {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const token = getToken();
+
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(options.headers as Record<string, string> || {}),
     };
+
+    // Inject Bearer token so requests work cross-domain in production.
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,

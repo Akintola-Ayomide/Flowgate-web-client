@@ -10,7 +10,6 @@ export default function SettingsPage() {
     const { user, isLoading, logout } = useAuth()
     const [activeTab, setActiveTab] = React.useState("profile")
     const [isSigningOut, setIsSigningOut] = React.useState(false)
-    const [showSignOutConfirm, setShowSignOutConfirm] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [saved, setSaved] = React.useState(false)
 
@@ -39,12 +38,6 @@ export default function SettingsPage() {
     }
 
     const handleSignOut = async () => {
-        if (!showSignOutConfirm) {
-            setShowSignOutConfirm(true)
-            // Auto-dismiss the confirmation after 5 seconds if user doesn't act
-            setTimeout(() => setShowSignOutConfirm(false), 5000)
-            return
-        }
         setIsSigningOut(true)
         try {
             await logout()
@@ -217,26 +210,20 @@ export default function SettingsPage() {
                             <h3 className="text-sm font-display font-bold text-destructive tracking-tight">Sign Out</h3>
                         </div>
                         <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                            {showSignOutConfirm
-                                ? "Are you sure? Click again to confirm sign out."
-                                : "You will be logged out of your current session on this device."}
+                            You will be logged out of your current session on this device.
                         </p>
                     </div>
                     <button
                         onClick={handleSignOut}
                         disabled={isSigningOut}
-                        className={`shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                            showSignOutConfirm
-                                ? "bg-destructive text-destructive-foreground border-destructive hover:bg-destructive/90"
-                                : "bg-background text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50"
-                        }`}
+                        className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider border border-destructive/30 bg-background text-destructive hover:bg-destructive/10 hover:border-destructive/50 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                         {isSigningOut ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                             <LogOut className="h-3.5 w-3.5" />
                         )}
-                        <span>{showSignOutConfirm ? "Confirm Sign Out" : "Sign Out"}</span>
+                        <span>Sign Out</span>
                     </button>
                 </div>
             </div>

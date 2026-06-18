@@ -197,4 +197,8 @@ export const queueApi = {
             method: 'POST',
             body: JSON.stringify({ token }),
         }),
+
+    /** Delete a queue permanently (owner only). */
+    deleteQueue: (id: number): Promise<void> =>
+        request<void>(`/queues/${id}`, { method: 'DELETE' }),
 };

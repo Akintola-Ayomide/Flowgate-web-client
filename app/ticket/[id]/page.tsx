@@ -7,6 +7,8 @@ import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.a
 import { Loader2, ArrowLeft, QrCode, Bell, BellOff, AlertTriangle } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function TicketPage() {
     const params = useParams()
     const router = useRouter()
@@ -53,8 +55,12 @@ export default function TicketPage() {
 
     useEffect(() => {
         if (!queueId) return;
-        // Initialize socket connection
-        const socket = io();
+        // Connect directly to the backend WebSocket server.
+        // io() without args connects to the page's own origin, which is the
+        // Next.js frontend — NOT where the Socket.io server lives.
+        const socket = io(BACKEND_URL, {
+            transports: ['websocket', 'polling'],
+        });
         socketRef.current = socket;
         // Join the room for real-time updates
         socket.emit('joinQueueRoom', { queueId });
@@ -72,6 +78,11 @@ export default function TicketPage() {
         socket.on('userPrioritized', fetchStatus);
         socket.on('userJoined', fetchStatus);
         socket.on('userLeft', fetchStatus);
+        socket.on('queueStatusChanged', fetchStatus);
+        // If the queue is deleted while the user is waiting, send them home.
+        socket.on('queueDeleted', () => {
+            router.replace('/dashboard?queue_deleted=1');
+        });
         
         fetchStatus();
         return () => {
@@ -85,9 +96,11 @@ export default function TicketPage() {
         if (queueId) {
             try {
                 await queueApi.leaveQueue(queueId)
+                // Clear local state immediately for instant UI feedback.
+                setStatusData(null)
                 router.replace('/dashboard')
             } catch (err) {
-                alert("Failed to leave queue")
+                alert("Failed to leave queue. Please try again.")
             }
         } else {
             router.back()

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Search, Plus, Filter, RefreshCw, Loader2 } from "lucide-react"
+import { Search, Plus, Filter, RefreshCw, Loader2, Trash2 } from "lucide-react"
 import { Button } from "@/shared/ui/button"
 import { queueApi, Queue, QueueStatus } from "@/features/Queue/services/queue.api"
 import { cn } from "@/shared/lib/utils"
@@ -29,6 +29,7 @@ export default function QueuesPage() {
     const [search, setSearch] = React.useState("")
     const [statusFilter, setStatusFilter] = React.useState<QueueStatus | "all">("all")
     const [updatingId, setUpdatingId] = React.useState<number | null>(null)
+    const [deletingId, setDeletingId] = React.useState<number | null>(null)
 
     const fetchQueues = React.useCallback(async () => {
         setIsLoading(true)
@@ -61,6 +62,20 @@ export default function QueuesPage() {
             alert(err.message)
         } finally {
             setUpdatingId(null)
+        }
+    }
+
+    const handleDeleteQueue = async (queue: Queue) => {
+        if (!confirm(`Delete "${queue.name}"? This cannot be undone.`)) return
+        setDeletingId(queue.id)
+        try {
+            await queueApi.deleteQueue(queue.id)
+            // Optimistic removal — no need to re-fetch the whole list.
+            setQueues((prev) => prev.filter((q) => q.id !== queue.id))
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete queue.')
+        } finally {
+            setDeletingId(null)
         }
     }
 
@@ -209,6 +224,14 @@ export default function QueuesPage() {
                                                     >
                                                         Manage
                                                     </Link>
+                                                    <button
+                                                        onClick={() => handleDeleteQueue(queue)}
+                                                        disabled={deletingId === queue.id}
+                                                        className="h-7 w-7 flex items-center justify-center rounded-md border border-destructive/20 text-destructive hover:bg-destructive/10 hover:border-destructive/40 disabled:opacity-50 transition-colors cursor-pointer"
+                                                        title="Delete queue"
+                                                    >
+                                                        {deletingId === queue.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -276,6 +299,14 @@ export default function QueuesPage() {
                                         >
                                             Manage
                                         </Link>
+                                        <button
+                                            onClick={() => handleDeleteQueue(queue)}
+                                            disabled={deletingId === queue.id}
+                                            className="h-9 w-9 flex items-center justify-center rounded-md border border-destructive/20 text-destructive hover:bg-destructive/10 hover:border-destructive/40 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                                            title="Delete queue"
+                                        >
+                                            {deletingId === queue.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                        </button>
                                     </div>
                                 </div>
                             )

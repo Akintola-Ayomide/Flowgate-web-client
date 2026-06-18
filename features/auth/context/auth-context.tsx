@@ -20,7 +20,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, LoginDTO, SignupDTO } from '../types';
 import { authApi } from '../services/auth.api';
-import { setToken, clearToken } from '../services/token.storage';
+import { setToken, clearToken, hasToken } from '../services/token.storage';
 
 // ─────────────────────────────────────────────────
 // Context type
@@ -64,9 +64,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const profile = await authApi.getProfile();
             setUser(profile);
         } catch {
-            // Not authenticated — clear any stale token.
-            clearToken();
-            setUser(null);
+            // Only clear state when genuinely unauthenticated.
+            // A concurrent flow (e.g. handleGoogleCallback) may have stored a
+            // token in localStorage while this request was in-flight — if so,
+            // do NOT wipe the user it already set in context.
+            if (!hasToken()) {
+                clearToken();
+                setUser(null);
+            }
         } finally {
             setIsLoading(false);
         }

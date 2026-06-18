@@ -6,12 +6,14 @@ import { useRouter, useParams } from "next/navigation";
 import { 
   Loader2, AlertTriangle, ArrowLeft, Play, Pause, 
   EllipsisVertical, RefreshCw, Users, Camera, Plus, 
-  Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle 
+  Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle, Trash2
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/utils";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function ManageQueuePage() {
   const router = useRouter();
@@ -23,6 +25,7 @@ export default function ManageQueuePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isServing, setIsServing] = useState(false);
   const [queueActive, setQueueActive] = useState(true);
+  const [isDeletingQueue, setIsDeletingQueue] = useState(false);
   const socketRef = useRef<any>(null);
 
   // Modals / Overlays states
@@ -69,7 +72,10 @@ export default function ManageQueuePage() {
   // Socket for real‑time updates
   useEffect(() => {
     if (isNaN(queueId)) return;
-    const socket = io();
+    // Connect directly to the backend WebSocket server.
+    const socket = io(BACKEND_URL, {
+      transports: ['websocket', 'polling'],
+    });
     socketRef.current = socket;
     socket.emit("joinQueueRoom", { queueId });
 
@@ -78,6 +84,11 @@ export default function ManageQueuePage() {
     socket.on("userPrioritized", fetchData);
     socket.on("userJoined", fetchData);
     socket.on("userLeft", fetchData);
+    socket.on("queueStatusChanged", fetchData);
+    // If this queue gets deleted (e.g. from another tab), go back to list.
+    socket.on("queueDeleted", () => {
+      router.replace('/dashboard/queues');
+    });
 
     return () => {
       socket.disconnect();
@@ -115,6 +126,19 @@ export default function ManageQueuePage() {
       fetchData(); // Trigger manual refresh in case socket takes time
     } catch (e) {
       alert("Failed to prioritize user");
+    }
+  };
+
+  const handleDeleteQueue = async () => {
+    if (!queue) return;
+    if (!confirm(`Are you sure you want to permanently delete "${queue.name}"? This cannot be undone and all participants will be removed.`)) return;
+    setIsDeletingQueue(true);
+    try {
+      await queueApi.deleteQueue(queue.id);
+      router.replace('/dashboard/queues');
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete queue.');
+      setIsDeletingQueue(false);
     }
   };
 
@@ -444,6 +468,34 @@ export default function ManageQueuePage() {
           </Button>
         </div>
       )}
+
+      {/* Danger Zone — Delete Queue */}
+      <div className="rounded-md border border-destructive/20 bg-destructive/5 p-5 shadow-xs relative overflow-hidden mt-4">
+        <div className="absolute inset-0 dot-grid opacity-[0.06] pointer-events-none" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Trash2 className="h-4 w-4 text-destructive shrink-0" />
+              <h3 className="text-sm font-display font-bold text-destructive tracking-tight">Delete Queue</h3>
+            </div>
+            <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+              Permanently removes this queue and all participant records. This cannot be undone.
+            </p>
+          </div>
+          <button
+            onClick={handleDeleteQueue}
+            disabled={isDeletingQueue}
+            className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider border border-destructive/30 bg-background text-destructive hover:bg-destructive/10 hover:border-destructive/60 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isDeletingQueue ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            <span>Delete Queue</span>
+          </button>
+        </div>
+      </div>
 
       {/* Verification / QR Camera Modal */}
       {showScanner && (

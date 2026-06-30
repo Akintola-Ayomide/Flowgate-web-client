@@ -64,6 +64,10 @@ class AuthApiService {
         });
 
         if (!response.ok) {
+            if (response.status === 401 && typeof window !== 'undefined') {
+                window.dispatchEvent(new Event('auth-unauthorized'));
+            }
+
             let errorData: { message?: string; code?: string; details?: Record<string, string[]>; errors?: Record<string, string[]> };
             try {
                 errorData = await response.json();
@@ -100,6 +104,33 @@ class AuthApiService {
         return this.request<AuthResponse>('/auth/register', {
             method: 'POST',
             body: JSON.stringify(payload),
+        });
+    }
+
+    /**
+     * Step 1 of signup: sends a 6-digit OTP to the given email.
+     * Returns a generic success message.
+     */
+    async sendVerificationCode(email: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>('/auth/send-verification', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    }
+
+    /**
+     * Step 2 of signup: submits the OTP together with the user's name and
+     * password. On success the backend creates the account and returns a JWT.
+     */
+    async verifyAndSignup(data: {
+        email: string;
+        code: string;
+        name: string;
+        password: string;
+    }): Promise<AuthResponse> {
+        return this.request<AuthResponse>('/auth/verify-email', {
+            method: 'POST',
+            body: JSON.stringify(data),
         });
     }
 
@@ -153,6 +184,44 @@ class AuthApiService {
             method: 'POST',
             body: JSON.stringify({ token, password }),
         });
+    }
+
+    async updateProfile(data: { name?: string; avatar?: string | null }): Promise<User> {
+        return this.request<User>('/auth/profile', {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async uploadImage(file: File): Promise<{ url: string }> {
+        const token = getToken();
+        const formData = new FormData();
+        formData.append('image', file);
+
+        const headers: Record<string, string> = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`${API_BASE}/upload/image`, {
+            method: 'POST',
+            body: formData,
+            headers,
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            let errorMsg = 'Image upload failed';
+            try {
+                const errJson = await response.json();
+                if (errJson && errJson.message) {
+                    errorMsg = errJson.message;
+                }
+            } catch { }
+            throw new Error(errorMsg);
+        }
+
+        return response.json();
     }
 }
 

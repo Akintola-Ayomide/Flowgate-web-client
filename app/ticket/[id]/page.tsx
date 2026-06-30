@@ -4,10 +4,119 @@ import { io } from "socket.io-client";
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api";
-import { Loader2, ArrowLeft, QrCode, Bell, BellOff, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, QrCode, Bell, AlertTriangle, Timer } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// ──────────────────────────────────────────────
+// Persistent Countdown Timer Hook
+// ──────────────────────────────────────────────
+
+/**
+ * Storage key for persisting the countdown end-time for a specific queue entry.
+ * Keyed by entryId so multiple queues don't overwrite each other.
+ */
+const timerKey = (entryId: string) => `qline_timer_end_${entryId}`;
+
+/**
+ * usePersistedCountdown — a localStorage-backed countdown timer.
+ *
+ * Strategy:
+ * - Stores an absolute `endTime` (Unix ms) in localStorage keyed by entryId.
+ * - On every mount (including reloads), reads the stored endTime and computes
+ *   remaining seconds from `endTime - Date.now()` — so the timer always
+ *   resumes exactly where it left off.
+ * - When the server sends a new `estimatedMinutes` (e.g. position shifts via
+ *   WebSocket), we compare it to what the stored endTime implies. If the
+ *   difference is significant (>90 seconds drift), we sync to the new
+ *   server value and update the stored endTime.
+ * - The interval reads from Date.now() each tick rather than decrementing
+ *   state, so it stays accurate across tab suspensions and CPU throttling.
+ *
+ * @param estimatedMinutes - Estimated wait time in minutes from the server.
+ * @param entryId          - Unique ID for this queue entry (used as storage key).
+ */
+function usePersistedCountdown(estimatedMinutes: number | undefined, entryId: string) {
+    const [secondsLeft, setSecondsLeft] = useState<number>(0);
+    const endTimeRef = useRef<number>(0);
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // ── On mount: restore from localStorage or initialise from server estimate ──
+    useEffect(() => {
+        if (!entryId || estimatedMinutes === undefined) return;
+
+        const stored = localStorage.getItem(timerKey(entryId));
+        const serverEndTime = Date.now() + Math.round(estimatedMinutes * 60 * 1000);
+
+        if (stored) {
+            const parsedEndTime = parseInt(stored, 10);
+            if (!isNaN(parsedEndTime) && parsedEndTime > Date.now()) {
+                // Valid stored endTime — resume from it.
+                endTimeRef.current = parsedEndTime;
+                setSecondsLeft(Math.max(0, Math.floor((parsedEndTime - Date.now()) / 1000)));
+                return;
+            }
+        }
+
+        // No valid stored value — initialise from server estimate.
+        endTimeRef.current = serverEndTime;
+        localStorage.setItem(timerKey(entryId), String(serverEndTime));
+        setSecondsLeft(Math.max(0, Math.round(estimatedMinutes * 60)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entryId]); // Only runs once on mount per entry
+
+    // ── Sync when server estimate changes meaningfully (position shift) ──
+    useEffect(() => {
+        if (!entryId || estimatedMinutes === undefined || endTimeRef.current === 0) return;
+
+        const serverEndTime = Date.now() + Math.round(estimatedMinutes * 60 * 1000);
+        const currentSecondsLeft = Math.max(0, Math.floor((endTimeRef.current - Date.now()) / 1000));
+        const serverSecondsLeft = Math.round(estimatedMinutes * 60);
+
+        // Sync only when the server's estimate meaningfully diverges (>90s difference).
+        // This covers real position advances without resetting for minor drift.
+        if (Math.abs(serverSecondsLeft - currentSecondsLeft) > 90) {
+            endTimeRef.current = serverEndTime;
+            localStorage.setItem(timerKey(entryId), String(serverEndTime));
+            setSecondsLeft(Math.max(0, serverSecondsLeft));
+        }
+    }, [estimatedMinutes, entryId]);
+
+    // ── Tick interval — reads from endTimeRef, not state ──
+    useEffect(() => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+
+        intervalRef.current = setInterval(() => {
+            if (endTimeRef.current === 0) return;
+            const remaining = Math.max(0, Math.floor((endTimeRef.current - Date.now()) / 1000));
+            setSecondsLeft(remaining);
+            if (remaining === 0) {
+                clearInterval(intervalRef.current!);
+                // Clear storage so it doesn't persist a stale zero
+                localStorage.removeItem(timerKey(entryId));
+            }
+        }, 1000);
+
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entryId]); // Start once per entry, interval self-manages via endTimeRef
+
+    const minutes = Math.floor(secondsLeft / 60);
+    const seconds = secondsLeft % 60;
+    const display =
+        secondsLeft <= 0
+            ? "Ready!"
+            : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+    return { minutes, seconds, secondsLeft, display };
+}
+
+// ──────────────────────────────────────────────
+// Page Component
+// ──────────────────────────────────────────────
 
 export default function TicketPage() {
     const params = useParams()
@@ -18,8 +127,9 @@ export default function TicketPage() {
     const [statusData, setStatusData] = useState<QueueStatusResponse | null>(null)
     const [queueId, setQueueId] = useState<number | null>(null)
     const [qrToken, setQrToken] = useState<string>("")
-    const [notifyOnTurn, setNotifyOnTurn] = useState(false)
     const socketRef = useRef<any>(null);
+
+    const countdown = usePersistedCountdown(statusData?.estimatedWaitTime, (statusData?.entry?.id?.toString() ?? entryId));
 
     useEffect(() => {
         const initialize = async () => {
@@ -56,8 +166,6 @@ export default function TicketPage() {
     useEffect(() => {
         if (!queueId) return;
         // Connect directly to the backend WebSocket server.
-        // io() without args connects to the page's own origin, which is the
-        // Next.js frontend — NOT where the Socket.io server lives.
         const socket = io(BACKEND_URL, {
             transports: ['websocket', 'polling'],
         });
@@ -91,19 +199,22 @@ export default function TicketPage() {
     }, [queueId]);
 
     const handleLeaveQueue = async () => {
-        if (!confirm("Are you sure you want to leave this queue? You will lose your spot.")) return
+        if (!confirm("Are you sure you want to leave this queue? You will lose your spot.")) return;
         
         if (queueId) {
             try {
-                await queueApi.leaveQueue(queueId)
-                // Clear local state immediately for instant UI feedback.
-                setStatusData(null)
-                router.replace('/dashboard')
+                await queueApi.leaveQueue(queueId);
+                // Clear persisted timer for this entry, if any
+                if (statusData?.entry?.id) {
+                    localStorage.removeItem(timerKey(statusData.entry.id.toString()));
+                }
+                setStatusData(null);
+                router.replace('/dashboard');
             } catch (err) {
-                alert("Failed to leave queue. Please try again.")
+                alert("Failed to leave queue. Please try again.");
             }
         } else {
-            router.back()
+            router.back();
         }
     }
 
@@ -138,6 +249,16 @@ export default function TicketPage() {
 
     const { position, peopleAhead, estimatedWaitTime, entry, queue } = statusData
     const ticketNumber = entry ? `#${entry.position}` : `#${position ?? '?'}`
+
+    // Derive a color class for the countdown based on urgency.
+    const countdownColor =
+        countdown.secondsLeft === 0
+            ? "text-green-500"
+            : countdown.minutes < 2
+            ? "text-red-500"
+            : countdown.minutes <= 5
+            ? "text-accent"
+            : "text-primary";
 
     return (
         <div className="min-h-screen bg-background py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -197,42 +318,43 @@ export default function TicketPage() {
 
                 {/* Stats Panel */}
                 <div className="bg-background rounded-md shadow-xs border border-border/80 p-4 flex gap-4">
+                    {/* People Ahead */}
                     <div className="flex-1 bg-secondary/40 border border-border/50 rounded-md p-4 text-center">
                         <div className="text-3xl font-display font-black text-primary mb-0.5">{peopleAhead ?? 0}</div>
                         <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">People Ahead</div>
                     </div>
+
+                    {/* Live Countdown Timer */}
                     <div className="flex-1 bg-secondary/40 border border-border/50 rounded-md p-4 text-center">
-                        <div className="text-3xl font-display font-black text-accent mb-0.5">~{estimatedWaitTime ?? 0}<span className="text-base text-accent/70 ml-0.5 font-bold">m</span></div>
-                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Est. Wait</div>
+                        <div className={`flex items-end justify-center gap-0.5 font-display font-black mb-0.5 ${countdownColor}`}>
+                            <Timer className="h-4 w-4 mb-1 shrink-0 opacity-70" />
+                            {countdown.secondsLeft === 0 ? (
+                                <span className="text-2xl">Ready!</span>
+                            ) : (
+                                <span className="text-3xl tabular-nums">{countdown.display}</span>
+                            )}
+                        </div>
+                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                            {countdown.secondsLeft === 0
+                                ? "Your turn now"
+                                : estimatedWaitTime !== undefined
+                                ? `~${estimatedWaitTime}m est. · counting down`
+                                : "Est. Wait"}
+                        </div>
                     </div>
                 </div>
 
-                {/* Notifications Alert Toggle */}
+                {/* Notifications Alert */}
                 <div className="bg-background rounded-md shadow-xs border border-border/80 p-4 flex justify-between items-center">
                     <div className="flex items-center text-foreground gap-3">
                         <div className="w-8 h-8 rounded-md bg-secondary border border-border/60 flex items-center justify-center shrink-0">
-                            {notifyOnTurn ? <Bell className="h-4.5 w-4.5 text-primary" /> : <BellOff className="h-4.5 w-4.5 text-muted-foreground" />}
+                            <Bell className="h-4.5 w-4.5 text-primary" />
                         </div>
                         <div>
-                            <span className="font-semibold text-sm">Notifications Alert</span>
-                            <p className="text-[10px] text-muted-foreground font-medium">Notify me when my turn approaches</p>
+                            <span className="font-semibold text-sm">Email Notifications Active</span>
+                            <p className="text-[10px] text-muted-foreground font-medium">You'll receive alerts when 3 people are ahead and when ≤5 min remain</p>
                         </div>
                     </div>
-                    
-                    <button 
-                        onClick={() => setNotifyOnTurn(!notifyOnTurn)}
-                        className={`focus:outline-none relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                            notifyOnTurn ? "bg-primary" : "bg-secondary border border-border"
-                        }`}
-                        role="switch"
-                        aria-checked={notifyOnTurn}
-                    >
-                        <span 
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow-xs transition duration-200 ease-in-out ${
-                                notifyOnTurn ? "translate-x-5 bg-background" : "translate-x-0 bg-muted-foreground"
-                            }`} 
-                        />
-                    </button>
                 </div>
 
                 {/* Leave Queue Button */}

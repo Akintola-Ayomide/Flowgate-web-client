@@ -2,16 +2,19 @@
 
 import * as React from "react"
 import { useAuth } from "@/features/auth/context/auth-context"
+import { authApi } from "@/features/auth/services/auth.api"
 import { UserCircle, Shield, Bell, Palette, Upload, Loader2, CheckCircle2, LogOut, AlertTriangle } from "lucide-react"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 
 export default function SettingsPage() {
-    const { user, isLoading, logout } = useAuth()
+    const { user, isLoading, logout, updateProfile } = useAuth()
     const [activeTab, setActiveTab] = React.useState("profile")
     const [isSigningOut, setIsSigningOut] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [saved, setSaved] = React.useState(false)
+    const [isUploading, setIsUploading] = React.useState(false)
+    const fileInputRef = React.useRef<HTMLInputElement>(null)
 
     // Form state mock
     const [formData, setFormData] = React.useState({
@@ -29,12 +32,54 @@ export default function SettingsPage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!formData.name.trim()) return
         setIsSaving(true)
         setSaved(false)
-        await new Promise(r => setTimeout(r, 800))
-        setIsSaving(false)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
+        try {
+            await updateProfile({ name: formData.name.trim() })
+            setSaved(true)
+            setTimeout(() => setSaved(false), 3000)
+        } catch (err: any) {
+            alert(err.message || "Failed to update profile name")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click()
+    }
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploading(true)
+        try {
+            const { url } = await authApi.uploadImage(file)
+            await updateProfile({ avatar: url })
+        } catch (err: any) {
+            alert(err.message || "Failed to upload image")
+        } finally {
+            setIsUploading(false)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "" // Reset
+            }
+        }
+    }
+
+    const handleRemoveAvatar = async () => {
+        if (!user?.avatar) return
+        if (!confirm("Are you sure you want to remove your profile picture?")) return
+
+        setIsUploading(true)
+        try {
+            await updateProfile({ avatar: null })
+        } catch (err: any) {
+            alert(err.message || "Failed to remove profile picture")
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const handleSignOut = async () => {
@@ -103,7 +148,12 @@ export default function SettingsPage() {
                             <form onSubmit={handleSave} className="space-y-5">
                                 {/* Avatar */}
                                 <div className="flex items-center gap-5">
-                                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl border border-primary/25 shadow-xs">
+                                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl border border-primary/25 shadow-xs relative overflow-hidden">
+                                        {isUploading ? (
+                                            <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+                                                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                            </div>
+                                        ) : null}
                                         {user?.avatar ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={user.avatar} alt={user.name} className="h-full w-full rounded-full object-cover" />
@@ -112,11 +162,32 @@ export default function SettingsPage() {
                                         )}
                                     </div>
                                     <div className="flex gap-2.5">
-                                        <Button type="button" variant="secondary" size="sm" className="gap-2 text-xs font-bold uppercase">
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleFileChange}
+                                            accept="image/jpeg,image/png,image/gif,image/webp"
+                                            className="hidden"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={handleUploadClick}
+                                            disabled={isUploading}
+                                            className="gap-2 text-xs font-bold uppercase"
+                                        >
                                             <Upload className="h-3.5 w-3.5" />
                                             Upload
                                         </Button>
-                                        <Button type="button" variant="ghost" size="sm" className="text-xs font-bold uppercase text-destructive hover:bg-destructive/5 hover:text-destructive border border-transparent hover:border-destructive/10">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleRemoveAvatar}
+                                            disabled={isUploading || !user?.avatar}
+                                            className="text-xs font-bold uppercase text-destructive hover:bg-destructive/5 hover:text-destructive border border-transparent hover:border-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
                                             Remove
                                         </Button>
                                     </div>

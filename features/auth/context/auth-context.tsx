@@ -18,9 +18,10 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { User, LoginDTO, SignupDTO } from '../types';
 import { authApi } from '../services/auth.api';
-import { setToken, clearToken, hasToken } from '../services/token.storage';
+import { setToken, clearToken, hasToken, getToken } from '../services/token.storage';
 
 // ─────────────────────────────────────────────────
 // Context type
@@ -37,6 +38,7 @@ interface AuthContextType {
     loginGuest: (name: string, phone?: string) => Promise<void>;
     /** Call after a Google OAuth callback to hydrate state from a token in the URL */
     handleGoogleCallback: (token: string) => Promise<void>;
+    updateProfile: (data: { name?: string; avatar?: string | null }) => Promise<void>;
 }
 
 // ─────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
      */
     const checkAuth = useCallback(async () => {
         setIsLoading(true);
+        const tokenAtStart = getToken();
         try {
             const profile = await authApi.getProfile();
             setUser(profile);
@@ -68,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // A concurrent flow (e.g. handleGoogleCallback) may have stored a
             // token in localStorage while this request was in-flight — if so,
             // do NOT wipe the user it already set in context.
-            if (!hasToken()) {
+            if (getToken() === tokenAtStart) {
                 clearToken();
                 setUser(null);
             }
@@ -80,6 +83,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         checkAuth();
     }, [checkAuth]);
+
+    const pathname = usePathname();
+    const router = useRouter();
+
+    // Redirect to login page if user is unauthenticated on a protected dashboard route
+    useEffect(() => {
+        if (!isLoading && !user && pathname.startsWith('/dashboard')) {
+            router.push('/auth?error=session_expired');
+        }
+    }, [isLoading, user, pathname, router]);
+
+    // Listen to global 401 unauthorized events to instantly log out the user
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const handleUnauthorized = () => {
+            clearToken();
+            setUser(null);
+        };
+
+        window.addEventListener('auth-unauthorized', handleUnauthorized);
+        return () => {
+            window.removeEventListener('auth-unauthorized', handleUnauthorized);
+        };
+    }, []);
 
     // ── Actions ────────────────────────────────────
 
@@ -137,6 +165,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const updateProfile = async (data: { name?: string; avatar?: string | null }) => {
+        const updated = await authApi.updateProfile(data);
+        setUser(updated);
+    };
+
     // ── Provider value ─────────────────────────────
 
     return (
@@ -151,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 loginWithGoogle,
                 loginGuest,
                 handleGoogleCallback,
+                updateProfile,
             }}
         >
             {children}

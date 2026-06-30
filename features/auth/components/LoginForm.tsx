@@ -55,7 +55,7 @@ export function LoginForm({ onSwitchToSignup }: LoginFormProps) {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-4">
                     <Input
-                        label="Email / Username"
+                        label="Email"
                         placeholder="you@example.com"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}

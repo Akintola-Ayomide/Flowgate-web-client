@@ -1,68 +1,133 @@
 import * as React from 'react';
-import { Eye, EyeOff, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Mail, ArrowLeft, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { useAuth } from '../context/auth-context';
 import { SignupDTO } from '../types';
 import { GoogleLoginButton } from './GoogleLoginButton';
+import { authApi } from '../services/auth.api';
+import { setToken } from '../services/token.storage';
 
 interface SignupFormProps {
     onSwitchToLogin: () => void;
 }
 
+/** How long (in seconds) the user must wait before resending the code. */
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
-    const { signup, isLoading: isAuthLoading, loginWithGoogle } = useAuth();
+    const { loginWithGoogle } = useAuth();
     const router = useRouter();
+
+    // ── Form state ───────────────────────────────────────────────
     const [isLoading, setIsLoading] = React.useState(false);
     const [showPassword, setShowPassword] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-
-    // Simulated email verification states
-    const [isVerifying, setIsVerifying] = React.useState(false);
-    const [verificationCode, setVerificationCode] = React.useState('');
-    const [verificationError, setVerificationError] = React.useState<string | null>(null);
-
     const [formData, setFormData] = React.useState<SignupDTO>({
         username: '',
         email: '',
         password: '',
     });
 
+    // ── OTP / verification state ─────────────────────────────────
+    const [isVerifying, setIsVerifying] = React.useState(false);
+    const [verificationCode, setVerificationCode] = React.useState('');
+    const [verificationError, setVerificationError] = React.useState<string | null>(null);
+
+    // Resend cooldown
+    const [resendCooldown, setResendCooldown] = React.useState(0);
+    const cooldownRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const startCooldown = React.useCallback(() => {
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
+        if (cooldownRef.current) clearInterval(cooldownRef.current);
+        cooldownRef.current = setInterval(() => {
+            setResendCooldown((prev) => {
+                if (prev <= 1) {
+                    clearInterval(cooldownRef.current!);
+                    cooldownRef.current = null;
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, []);
+
+    React.useEffect(() => {
+        return () => {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+        };
+    }, []);
+
+    // ── Step 1: send verification code ──────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        
-        // Simple check to make sure fields are populated before proceeding to verify
+
         if (!formData.username.trim() || !formData.email.trim() || !formData.password) {
+            setError('Please fill in all fields.');
             return;
         }
 
-        // Trigger simulated verification screen
-        setIsVerifying(true);
-    };
-
-    const handleVerifySubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setVerificationError(null);
         setIsLoading(true);
-
-        if (verificationCode.trim() !== '123456') {
-            setVerificationError('Invalid verification code. Enter 123456 to verify.');
-            setIsLoading(false);
-            return;
-        }
-
         try {
-            await signup(formData);
-            router.push('/dashboard');
+            await authApi.sendVerificationCode(formData.email);
+            setIsVerifying(true);
+            startCooldown();
         } catch (err: any) {
-            setVerificationError(err.message || 'Could not create account. Please try again.');
+            setError(err.message || 'Could not send verification code. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
+    // ── Step 1b: resend code ──────────────────────────────────────
+    const handleResend = async () => {
+        if (resendCooldown > 0) return;
+        setVerificationError(null);
+        setIsLoading(true);
+        try {
+            await authApi.sendVerificationCode(formData.email);
+            setVerificationCode('');
+            startCooldown();
+        } catch (err: any) {
+            setVerificationError(err.message || 'Could not resend code. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ── Step 2: verify code & create account ─────────────────────
+    const handleVerifySubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVerificationError(null);
+
+        if (verificationCode.trim().length !== 6) {
+            setVerificationError('Please enter the 6-digit code from your email.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const result = await authApi.verifyAndSignup({
+                email: formData.email,
+                code: verificationCode.trim(),
+                name: formData.username,
+                password: formData.password!,
+            });
+
+            // Store token and hydrate auth state, then redirect
+            setToken(result.accessToken);
+            router.push('/dashboard');
+        } catch (err: any) {
+            setVerificationError(err.message || 'Verification failed. Please check the code and try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ── OTP screen ───────────────────────────────────────────────
     if (isVerifying) {
         return (
             <div className="space-y-6">
@@ -83,27 +148,36 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                         Verify your email
                     </h2>
                     <p className="text-sm text-muted-foreground font-medium">
-                        We have sent a verification code to <span className="text-foreground font-bold">{formData.email}</span>.
+                        We sent a 6-digit code to{' '}
+                        <span className="text-foreground font-bold">{formData.email}</span>.
+                        Check your inbox (and spam folder).
                     </p>
                 </div>
 
                 <form onSubmit={handleVerifySubmit} className="space-y-4">
                     <Input
                         label="6-Digit Verification Code"
-                        placeholder="e.g. 123456"
+                        placeholder="e.g. 482910"
                         maxLength={6}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
                         value={verificationCode}
-                        onChange={(e) => setVerificationCode(e.target.value)}
+                        onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                         required
                         disabled={isLoading}
                     />
 
-                    <div className="p-3 bg-primary/5 text-primary text-xs rounded-md border border-primary/10 font-semibold flex items-start gap-2.5">
-                        <AlertCircle className="h-4 w-4 shrink-0 text-primary mt-0.5" />
-                        <div>
-                            <p className="font-bold">Verification Simulation Mode</p>
-                            <p className="font-normal text-muted-foreground mt-0.5">Please enter the simulated activation code <span className="text-primary font-bold">123456</span> to complete your verification.</p>
-                        </div>
+                    {/* Resend button */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleResend}
+                            disabled={resendCooldown > 0 || isLoading}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                            <RotateCcw className="h-3 w-3" />
+                            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                        </button>
                     </div>
 
                     {verificationError && (
@@ -118,13 +192,14 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                         size="lg"
                         isLoading={isLoading}
                     >
-                        Verify & Complete Signup
+                        Verify &amp; Complete Signup
                     </Button>
                 </form>
             </div>
         );
     }
 
+    // ── Signup form ──────────────────────────────────────────────
     return (
         <div className="space-y-6">
             <div className="space-y-1 text-left">
@@ -132,7 +207,7 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                     Create an account
                 </h2>
                 <p className="text-sm text-muted-foreground font-medium">
-                    Start your journey with Flowgate today.
+                    Start your journey with Qline today.
                 </p>
             </div>
 
@@ -160,7 +235,7 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                     <Input
                         label="Password"
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="Create a password"
+                        placeholder="Create a password (min. 8 characters)"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
@@ -193,7 +268,8 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                     size="lg"
                     isLoading={isLoading}
                 >
-                    Sign Up
+                    <Mail className="h-4 w-4 mr-2" />
+                    Sign Up with Email
                 </Button>
 
                 <div className="relative my-6">
@@ -209,7 +285,7 @@ export function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                     <GoogleLoginButton
                         text="Sign up with Google"
                         onClick={loginWithGoogle}
-                        isLoading={isLoading || isAuthLoading}
+                        isLoading={isLoading}
                     />
                 </div>
             </form>

@@ -14,8 +14,12 @@ const AUTH_PREFIXES = ['/auth'];
 /**
  * The auth callback page must always be accessible — even for authenticated users —
  * because it is where the Google OAuth flow lands to set up the session.
+ *
+ * Password-reset pages must also remain open for authenticated users so they
+ * can change a forgotten (or existing) password from within the app.
  */
 const AUTH_CALLBACK = '/auth/callback';
+const AUTH_OPEN_PATHS = ['/auth/forgot-password', '/auth/reset-password'];
 
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
@@ -35,6 +39,7 @@ export function middleware(req: NextRequest) {
     const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
     const isAuthRoute = AUTH_PREFIXES.some((p) => pathname.startsWith(p));
     const isCallbackPage = pathname === AUTH_CALLBACK || pathname.startsWith(AUTH_CALLBACK);
+    const isOpenAuthPage = AUTH_OPEN_PATHS.some((p) => pathname === p || pathname.startsWith(p));
 
     // Unauthenticated user → redirect to /auth (preserving the intended destination)
     if (isProtected && !hasToken) {
@@ -46,7 +51,7 @@ export function middleware(req: NextRequest) {
 
     // Authenticated user trying to visit auth pages → send to dashboard
     // Exception: always allow the /auth/callback page so the OAuth flow can complete.
-    if (isAuthRoute && hasToken && !isCallbackPage) {
+    if (isAuthRoute && hasToken && !isCallbackPage && !isOpenAuthPage) {
         const dashboardUrl = req.nextUrl.clone();
         dashboardUrl.pathname = '/dashboard';
         dashboardUrl.search = '';

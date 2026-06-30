@@ -8,7 +8,7 @@ export interface User {
 
 export interface LoginDTO {
     email: string;
-    password?: string;
+    password: string;
 }
 
 export interface SignupDTO {

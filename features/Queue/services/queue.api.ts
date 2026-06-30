@@ -46,6 +46,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     });
 
     if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('auth-unauthorized'));
+        }
+
         let errorData;
         try {
             errorData = await response.json();

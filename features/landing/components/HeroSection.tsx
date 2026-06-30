@@ -91,28 +91,6 @@ export function HeroSection() {
                     </motion.div>
                 </motion.div>
             </div>
-
-            {/* Stats section at the bottom */}
-            <div className="w-full border-t border-border bg-secondary/50 py-8 backdrop-blur-xs relative z-15">
-                <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-y-8 gap-x-0 text-center">
-                    <div className="px-4">
-                        <p className="font-display text-2xl md:text-3xl font-bold text-foreground">99.9%</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">System Uptime</p>
-                    </div>
-                    <div className="px-4 border-l border-border/60">
-                        <p className="font-display text-2xl md:text-3xl font-bold text-foreground">&lt; 3 Min</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">Average Wait Time</p>
-                    </div>
-                    <div className="px-4 md:border-l border-border/60">
-                        <p className="font-display text-2xl md:text-3xl font-bold text-foreground">2.4M+</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">Tickets Issued</p>
-                    </div>
-                    <div className="px-4 border-l border-border/60">
-                        <p className="font-display text-2xl md:text-3xl font-bold text-foreground">42%</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">Staff Productivity Gain</p>
-                    </div>
-                </div>
-            </div>
         </section>
     );
 }

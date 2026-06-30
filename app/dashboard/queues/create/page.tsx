@@ -2,11 +2,12 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Loader2, Plus, X, Image as ImageIcon } from "lucide-react"
+import { ArrowLeft, Loader2, Plus, X, Image as ImageIcon, Upload } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { queueApi, CreateQueueDto } from "@/features/Queue/services/queue.api"
+import { authApi } from "@/features/auth/services/auth.api"
 import { cn } from "@/shared/lib/utils"
 
 const MAX_PARTICIPANTS = 1000;
@@ -36,10 +37,32 @@ export default function CreateQueuePage() {
 
     // Business address and image options
     const [address, setAddress] = React.useState("")
-    const [imageOption, setImageOption] = React.useState<PresetKey | "custom" | "none">("none")
+    const [imageOption, setImageOption] = React.useState<PresetKey | "custom" | "upload" | "none">("none")
     const [customImageUrl, setCustomImageUrl] = React.useState("")
+    const [uploadedImageUrl, setUploadedImageUrl] = React.useState("")
+    const [isUploadingImage, setIsUploadingImage] = React.useState(false)
+    const imageFileInputRef = React.useRef<HTMLInputElement>(null)
 
     const [newFieldLabel, setNewFieldLabel] = React.useState("")
+
+    const handleUploadClick = () => {
+        imageFileInputRef.current?.click()
+    }
+
+    const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploadingImage(true)
+        try {
+            const { url } = await authApi.uploadImage(file)
+            setUploadedImageUrl(url)
+        } catch (err: any) {
+            alert(err.message || "Failed to upload image")
+        } finally {
+            setIsUploadingImage(false)
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -50,9 +73,11 @@ export default function CreateQueuePage() {
         // Select the final image URL
         const finalImage = imageOption === "custom" 
             ? customImageUrl 
-            : imageOption !== "none" 
-                ? PRESET_IMAGES[imageOption] 
-                : "";
+            : imageOption === "upload"
+                ? uploadedImageUrl
+                : imageOption !== "none" 
+                    ? PRESET_IMAGES[imageOption] 
+                    : "";
 
         // Package metadata inside the description field as JSON string
         const serializedDescription = JSON.stringify({
@@ -251,18 +276,79 @@ export default function CreateQueuePage() {
                             </button>
                             <button
                                 type="button"
+                                onClick={() => setImageOption("upload")}
+                                className={cn(
+                                    "flex flex-col items-center justify-center p-3 rounded-md border text-xs font-semibold cursor-pointer transition-all",
+                                    imageOption === "upload"
+                                        ? "bg-primary/10 border-primary text-primary"
+                                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                                )}
+                            >
+                                <Upload className="h-5 w-5 mb-1.5" />
+                                <span>Upload Image</span>
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => setImageOption("custom")}
                                 className={cn(
-                                    "col-span-2 flex flex-col items-center justify-center p-3 rounded-md border text-xs font-semibold cursor-pointer transition-all",
+                                    "flex flex-col items-center justify-center p-3 rounded-md border text-xs font-semibold cursor-pointer transition-all",
                                     imageOption === "custom"
                                         ? "bg-primary/10 border-primary text-primary"
                                         : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                                 )}
                             >
                                 <ImageIcon className="h-5 w-5 mb-1.5" />
-                                <span>Custom Image URL</span>
+                                <span>Custom URL</span>
                             </button>
                         </div>
+
+                        {imageOption === "upload" && (
+                            <div className="pt-1.5 space-y-3">
+                                <input
+                                    type="file"
+                                    ref={imageFileInputRef}
+                                    onChange={handleImageFileChange}
+                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                    className="hidden"
+                                />
+                                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 rounded-md border border-dashed border-border/80 bg-secondary/35">
+                                    <button
+                                        type="button"
+                                        onClick={handleUploadClick}
+                                        disabled={isUploadingImage || isLoading}
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border bg-background text-xs font-bold uppercase tracking-wider text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                                    >
+                                        {isUploadingImage ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <Upload className="h-3.5 w-3.5" />
+                                        )}
+                                        {uploadedImageUrl ? "Change Image" : "Choose File"}
+                                    </button>
+                                    
+                                    {uploadedImageUrl && (
+                                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                                src={uploadedImageUrl}
+                                                alt="Uploaded logo"
+                                                className="h-12 w-12 rounded-md object-cover border border-border/60 shrink-0"
+                                            />
+                                            <div className="text-left">
+                                                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider leading-none mb-1">Uploaded Successfully</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setUploadedImageUrl("")}
+                                                    className="text-xs text-destructive font-semibold hover:underline leading-none cursor-pointer"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {imageOption === "custom" && (
                             <div className="pt-1.5">

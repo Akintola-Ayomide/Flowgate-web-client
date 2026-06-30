@@ -1,8 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Mail, MessageCircle, FileText, ExternalLink, Search, Sparkles, AlertCircle, HelpCircle, CheckCircle2 } from "lucide-react"
-import { Button } from "@/shared/ui/button"
+import { Sparkles, HelpCircle } from "lucide-react"
 
 const FAQS = [
     { 
@@ -38,32 +37,10 @@ const FAQS = [
 ];
 
 export default function HelpPage() {
-    const [searchQuery, setSearchQuery] = React.useState("")
     const [selectedCategory, setSelectedCategory] = React.useState<string | "all">("all")
-    const [chatStatus, setChatStatus] = React.useState<{ online: boolean; message: string }>({ online: false, message: "Checking..." })
-
-    // Set chat availability based on business hours (9 AM - 5 PM local time)
-    React.useEffect(() => {
-        const checkStatus = () => {
-            const now = new Date()
-            const hours = now.getHours()
-            const day = now.getDay() // 0 = Sunday, 6 = Saturday
-
-            // Check if weekday and between 9 AM and 5 PM
-            if (day >= 1 && day <= 5 && hours >= 9 && hours < 17) {
-                setChatStatus({ online: true, message: "Agents Online" })
-            } else {
-                setChatStatus({ online: false, message: "We'll be back at 9:00 AM" })
-            }
-        }
-        checkStatus()
-    }, [])
 
     const filteredFaqs = FAQS.filter(faq => {
-        const matchesCategory = selectedCategory === "all" || faq.category === selectedCategory
-        const matchesSearch = faq.q.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              faq.a.toLowerCase().includes(searchQuery.toLowerCase())
-        return matchesCategory && matchesSearch
+        return selectedCategory === "all" || faq.category === selectedCategory
     })
 
     return (
@@ -73,70 +50,6 @@ export default function HelpPage() {
                 <div>
                     <h1 className="text-xl font-display font-bold text-foreground tracking-tight">Help & Support</h1>
                     <p className="text-muted-foreground text-xs font-medium mt-0.5">Learn how to configure virtual lines and manage customer flow.</p>
-                </div>
-                
-                {/* Search Bar */}
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                    <input
-                        type="text"
-                        placeholder="Search FAQs..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-10 w-full rounded-md border border-border bg-secondary pl-9 pr-4 text-xs font-medium text-foreground placeholder:text-muted-foreground/60 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-background transition-all"
-                    />
-                </div>
-            </div>
-
-            {/* Quick Actions Support Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {/* Documentation */}
-                <div className="rounded-md border border-border/80 bg-background p-6 text-center shadow-xs flex flex-col justify-between hover:border-primary/20 transition-colors">
-                    <div>
-                        <div className="mx-auto w-10 h-10 rounded-md bg-secondary border border-border/60 flex items-center justify-center text-primary mb-4">
-                            <FileText className="h-5 w-5" />
-                        </div>
-                        <h3 className="font-bold text-foreground mb-1 text-sm">Documentation</h3>
-                        <p className="text-xs text-muted-foreground mb-4 font-medium leading-relaxed">
-                            Read detailed guides and walkthroughs on how to configure your queue parameters.
-                        </p>
-                    </div>
-                    <Button variant="secondary" className="w-full gap-1.5 text-xs font-bold uppercase cursor-pointer">
-                        <span>Browse Docs</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                </div>
-
-                {/* Live Chat */}
-                <div className="rounded-md border border-border/80 bg-background p-6 text-center shadow-xs flex flex-col justify-between hover:border-primary/20 transition-colors">
-                    <div>
-                        <div className="mx-auto w-10 h-10 rounded-md bg-secondary border border-border/60 flex items-center justify-center text-accent mb-4 relative">
-                            <MessageCircle className="h-5 w-5" />
-                            {/* Live Dot */}
-                            <span className={`absolute top-0 right-0 h-2 w-2 rounded-full ${chatStatus.online ? "bg-primary animate-ping" : "bg-muted-foreground"}`} />
-                        </div>
-                        <h3 className="font-bold text-foreground mb-1 text-sm">Live Support</h3>
-                        <p className="text-xs text-muted-foreground mb-4 font-medium leading-relaxed">
-                            Chat directly with our operations support desk. Current status: <span className={chatStatus.online ? "text-primary font-bold" : "text-muted-foreground font-semibold"}>{chatStatus.message}</span>
-                        </p>
-                    </div>
-                    <Button variant={chatStatus.online ? "primary" : "secondary"} className="w-full text-xs font-bold uppercase cursor-pointer" disabled={!chatStatus.online}>
-                        {chatStatus.online ? "Start Chat" : "Offline"}
-                    </Button>
-                </div>
-
-                {/* Email Support */}
-                <div className="rounded-md border border-border/80 bg-background p-6 text-center shadow-xs flex flex-col justify-between hover:border-primary/20 transition-colors">
-                    <div>
-                        <div className="mx-auto w-10 h-10 rounded-md bg-secondary border border-border/60 flex items-center justify-center text-primary mb-4">
-                            <Mail className="h-5 w-5" />
-                        </div>
-                        <h3 className="font-bold text-foreground mb-1 text-sm">Email Support</h3>
-                        <p className="text-xs text-muted-foreground mb-4 font-medium leading-relaxed">
-                            Send us an inquiry or operational issue and we will get back to you within 12 hours.
-                        </p>
-                    </div>
-                    <Button variant="secondary" className="w-full text-xs font-bold uppercase cursor-pointer">Contact Us</Button>
                 </div>
             </div>
 

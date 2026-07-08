@@ -246,6 +246,9 @@ export default function ManageQueuePage() {
     setVerifiedEntry(null);
     setScanError(null);
 
+    // Set camera active first so React puts the video tag in the DOM
+    setCameraActive(true);
+
     // Check BarcodeDetector support once
     const supported = typeof window !== 'undefined' && !!window.BarcodeDetector;
     setBarcodeSupported(supported);
@@ -253,20 +256,24 @@ export default function ManageQueuePage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setCameraActive(true);
 
-        // Initialise BarcodeDetector and start the scan loop
-        if (supported && window.BarcodeDetector) {
-          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
-          rafRef.current = requestAnimationFrame(runScanLoop);
+      // Allow one frame render for videoRef.current to become populated
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(err => console.warn("Failed to play video stream:", err));
+
+          // Initialise BarcodeDetector and start the scan loop
+          if (supported && window.BarcodeDetector) {
+            detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+            rafRef.current = requestAnimationFrame(runScanLoop);
+          }
         }
-      }
+      }, 50);
     } catch (err) {
       console.warn("Failed to get camera access", err);
       alert("Camera access denied or unavailable.");
+      setCameraActive(false);
     }
   };
 
@@ -275,6 +282,7 @@ export default function ManageQueuePage() {
     setVerifiedEntry(null);
     setScanError(null);
     setTokenInput("");
+    startCamera();
   };
 
   const handleCloseScanner = () => {
@@ -312,15 +320,6 @@ export default function ManageQueuePage() {
       fetchData();
     } catch (err: any) {
       setScanError(err.message || 'Failed to serve participant.');
-    }
-  };
-
-  const handleSimulateScan = () => {
-    if (participants.length > 0) {
-      const firstUser = participants[0];
-      handleVerifyToken(firstUser.qrCodeToken);
-    } else {
-      setScanError("No participants currently waiting in the queue to simulate verification.");
     }
   };
 
@@ -776,23 +775,6 @@ export default function ManageQueuePage() {
                 </div>
               )}
 
-              {/* ── Simulation helper ── */}
-              {!verifiedEntry && !scanError && (
-                <div className="p-3 bg-secondary border border-border rounded-md space-y-2">
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Verification Testing Simulator</p>
-                  <p className="text-[11px] text-muted-foreground leading-normal">
-                    No device? Click below to automatically grab the first ticket token and verify it.
-                  </p>
-                  <button
-                    onClick={handleSimulateScan}
-                    disabled={participants.length === 0 || isVerifyingToken}
-                    className="w-full py-2 border border-primary/20 hover:border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all disabled:opacity-50"
-                  >
-                    {isVerifyingToken ? <Loader2 className="h-3 w-3 animate-spin inline mr-1" /> : null}
-                    Simulate scanning QR code
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-end px-6 py-3 border-t border-border bg-secondary/35">

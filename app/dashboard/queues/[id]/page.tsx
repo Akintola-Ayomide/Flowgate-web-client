@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import { useRouter, useParams } from "next/navigation";
 import { 
   Loader2, AlertTriangle, ArrowLeft, Play, Pause, 
   EllipsisVertical, RefreshCw, Users, Camera, Plus, 
-  Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle, Trash2
+  Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle, Trash2,
+  ScanLine, UserCheck, Hash, Clock, SkipForward, WifiOff
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/utils";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
+
+// ── Type augmentation for BarcodeDetector (not yet in lib.dom) ──
+declare global {
+  interface Window {
+    BarcodeDetector?: new (options?: { formats?: string[] }) => {
+      detect: (source: HTMLVideoElement | HTMLCanvasElement | ImageBitmap) => Promise<Array<{ rawValue: string }>>;
+    };
+  }
+}
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -38,9 +48,13 @@ export default function ManageQueuePage() {
   const [cameraActive, setCameraActive] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
-  const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [verifiedEntry, setVerifiedEntry] = useState<QueueEntry | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [barcodeSupported, setBarcodeSupported] = useState<boolean | null>(null); // null = unknown
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const detectorRef = useRef<InstanceType<NonNullable<Window['BarcodeDetector']>> | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   // Walk-in guest states
   const [guestName, setGuestName] = useState("");
@@ -187,24 +201,11 @@ export default function ManageQueuePage() {
     }
   };
 
-  // Camera scanner actions
-  const startCamera = async () => {
-    setScanResult(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setCameraActive(true);
-      }
-    } catch (err) {
-      console.warn("Failed to get camera access", err);
-      alert("Camera access denied or unavailable.");
+  const stopCamera = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     }
-  };
-
-  const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -213,11 +214,66 @@ export default function ManageQueuePage() {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
+  }, []);
+
+  // ── BarcodeDetector QR scanning loop ──
+  const runScanLoop = useCallback(() => {
+    const video = videoRef.current;
+    const detector = detectorRef.current;
+    if (!video || !detector || video.readyState < 2) {
+      rafRef.current = requestAnimationFrame(runScanLoop);
+      return;
+    }
+    detector.detect(video)
+      .then((results) => {
+        if (results.length > 0) {
+          const code = results[0].rawValue;
+          // Stop scanning once a code is found
+          stopCamera();
+          handleVerifyToken(code);
+        } else {
+          rafRef.current = requestAnimationFrame(runScanLoop);
+        }
+      })
+      .catch(() => {
+        rafRef.current = requestAnimationFrame(runScanLoop);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopCamera]);
+
+  // Camera scanner actions
+  const startCamera = async () => {
+    setVerifiedEntry(null);
+    setScanError(null);
+
+    // Check BarcodeDetector support once
+    const supported = typeof window !== 'undefined' && !!window.BarcodeDetector;
+    setBarcodeSupported(supported);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setCameraActive(true);
+
+        // Initialise BarcodeDetector and start the scan loop
+        if (supported && window.BarcodeDetector) {
+          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+          rafRef.current = requestAnimationFrame(runScanLoop);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to get camera access", err);
+      alert("Camera access denied or unavailable.");
+    }
   };
 
   const handleOpenScanner = () => {
     setShowScanner(true);
-    setScanResult(null);
+    setVerifiedEntry(null);
+    setScanError(null);
     setTokenInput("");
   };
 
@@ -229,34 +285,42 @@ export default function ManageQueuePage() {
   const handleVerifyToken = async (token: string) => {
     if (!token.trim()) return;
     setIsVerifyingToken(true);
-    setScanResult(null);
+    setVerifiedEntry(null);
+    setScanError(null);
     try {
       const result = await queueApi.verifyQr(token);
-      setScanResult({
-        success: true,
-        message: `Verify Success! Participant: ${result.user?.name || `ID #${result.userId}`} is at Position #${result.position} in the queue.`
-      });
+      setVerifiedEntry(result);
       fetchData();
     } catch (err: any) {
-      setScanResult({
-        success: false,
-        message: err.message || "Ticket verification failed. Code is invalid or expired."
-      });
+      setScanError(err.message || "Ticket verification failed. Code is invalid or expired.");
     } finally {
       setIsVerifyingToken(false);
     }
   };
 
+  const handleServeVerified = async () => {
+    if (!verifiedEntry || !queue) return;
+    try {
+      // Move the verified participant to position 1 then serve
+      if (verifiedEntry.position !== 1) {
+        await queueApi.prioritizeUser(queue.id, verifiedEntry.userId, 1);
+      }
+      await queueApi.serveNext(queue.id);
+      setVerifiedEntry(null);
+      setScanError(null);
+      handleCloseScanner();
+      fetchData();
+    } catch (err: any) {
+      setScanError(err.message || 'Failed to serve participant.');
+    }
+  };
+
   const handleSimulateScan = () => {
     if (participants.length > 0) {
-      // Simulate with the first user waiting
       const firstUser = participants[0];
       handleVerifyToken(firstUser.qrCodeToken);
     } else {
-      setScanResult({
-        success: false,
-        message: "No participants currently waiting in the queue to simulate verification."
-      });
+      setScanError("No participants currently waiting in the queue to simulate verification.");
     }
   };
 
@@ -501,6 +565,7 @@ export default function ManageQueuePage() {
       {showScanner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-background border border-border rounded-md shadow-lg max-w-md w-full overflow-hidden flex flex-col relative animate-scale-up">
+            {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/50">
               <div className="flex items-center gap-2">
                 <Camera className="h-5 w-5 text-primary" />
@@ -514,17 +579,18 @@ export default function ManageQueuePage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Tabs / Scan Options */}
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+              {/* Mode tabs */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-md">
                 <button 
                   onClick={() => { if (!cameraActive) startCamera(); }}
                   className={cn(
-                    "py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors",
+                    "py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors flex items-center justify-center gap-1.5",
                     cameraActive ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Camera Stream
+                  <Camera className="h-3.5 w-3.5" />
+                  Camera
                 </button>
                 <button 
                   onClick={stopCamera}
@@ -537,19 +603,63 @@ export default function ManageQueuePage() {
                 </button>
               </div>
 
-              {/* Viewport for camera or manual form */}
+              {/* ── Camera view ── */}
               {cameraActive ? (
-                <div className="relative aspect-square w-full rounded-md bg-black overflow-hidden border border-border flex items-center justify-center">
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline />
-                  {/* Laser scan animation overlay */}
-                  <div className="absolute inset-x-0 h-1 bg-primary/80 shadow-[0_0_12px_var(--primary)] top-1/2 -translate-y-1/2 animate-bounce pointer-events-none" />
-                  <div className="absolute inset-4 border-2 border-dashed border-primary/60 rounded-md pointer-events-none" />
+                <div className="space-y-3">
+                  {/* BarcodeDetector unsupported warning */}
+                  {barcodeSupported === false && (
+                    <div className="flex items-start gap-2.5 p-3 bg-accent/8 border border-accent/20 rounded-md">
+                      <WifiOff className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-foreground">Auto-scan not available</p>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">
+                          Your browser doesn't support the BarcodeDetector API. Use manual input below, or try Chrome / Edge.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Video feed */}
+                  <div className="relative aspect-square w-full rounded-md bg-black overflow-hidden border border-border">
+                    <video ref={videoRef} className="w-full h-full object-cover" playsInline />
+
+                    {/* Corner brackets */}
+                    <div className="absolute inset-6 pointer-events-none">
+                      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-primary/80 rounded-tl" />
+                      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-primary/80 rounded-tr" />
+                      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-primary/80 rounded-bl" />
+                      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-primary/80 rounded-br" />
+                    </div>
+
+                    {/* Scanning laser line */}
+                    {barcodeSupported !== false && (
+                      <div className="absolute inset-x-8 h-0.5 bg-primary shadow-[0_0_10px_var(--primary)] animate-bounce top-1/2 -translate-y-1/2 pointer-events-none" />
+                    )}
+
+                    {/* Scanning label */}
+                    <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/70 bg-black/40 px-2.5 py-1 rounded-sm backdrop-blur-sm flex items-center gap-1.5">
+                        {barcodeSupported !== false ? (
+                          <><ScanLine className="h-3 w-3 animate-pulse" /> Scanning…</>
+                        ) : (
+                          <>Camera active · use manual input</>
+                        )}
+                      </span>
+                    </div>
+
+                    {isVerifyingToken && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
+                /* ── Manual input view ── */
                 <div className="space-y-3">
                   <Input
                     label="QR Token Code"
-                    placeholder="Enter customer's ticket code token"
+                    placeholder="Paste or type the customer's ticket token"
                     value={tokenInput}
                     onChange={(e) => setTokenInput(e.target.value)}
                     disabled={isVerifyingToken}
@@ -565,40 +675,122 @@ export default function ManageQueuePage() {
                 </div>
               )}
 
-              {/* Simulation Option */}
-              <div className="p-3 bg-secondary border border-border rounded-md space-y-2">
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Verification Testing Simulator</p>
-                <p className="text-[11px] text-muted-foreground leading-normal">
-                  Testing walk-ins or don't have a device? Click below to automatically grab the first ticket token in the waitlist and verify it.
-                </p>
-                <button
-                  onClick={handleSimulateScan}
-                  disabled={participants.length === 0}
-                  className="w-full py-2 border border-primary/20 hover:border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all disabled:opacity-50"
-                >
-                  Simulate scanning QR code
-                </button>
-              </div>
-
-              {/* Result Indicator */}
-              {scanResult && (
-                <div className={cn(
-                  "p-4 rounded-md border flex items-start gap-3 animate-fade-in",
-                  scanResult.success 
-                    ? "bg-primary/5 border-primary/20 text-primary" 
-                    : "bg-destructive/5 border-destructive/20 text-destructive"
-                )}>
-                  {scanResult.success ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <h5 className="text-xs font-bold uppercase tracking-wider">
-                      {scanResult.success ? "Verification Successful" : "Verification Failed"}
-                    </h5>
-                    <p className="text-xs text-muted-foreground leading-relaxed mt-1">{scanResult.message}</p>
+              {/* ── Verification Result Panel ── */}
+              {verifiedEntry && (
+                <div className="rounded-md border border-primary/25 bg-primary/5 overflow-hidden animate-fade-in">
+                  {/* Success header */}
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-primary/15 bg-primary/8">
+                    <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-primary uppercase tracking-wider">Verification Successful</p>
+                      <p className="text-[10px] text-muted-foreground">Ticket is authentic and valid</p>
+                    </div>
                   </div>
+
+                  {/* Participant details */}
+                  <div className="p-4 space-y-3">
+                    {/* Avatar + Name */}
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+                        <span className="font-display font-black text-primary text-sm">
+                          {(verifiedEntry.user?.name || 'U').charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-foreground text-sm truncate">
+                          {verifiedEntry.user?.name || `User #${verifiedEntry.userId}`}
+                        </p>
+                        {verifiedEntry.user?.email && (
+                          <p className="text-[10px] text-muted-foreground truncate">{verifiedEntry.user.email}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Key stats row */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-background border border-border/60 rounded-md p-2.5 text-center">
+                        <Hash className="h-3.5 w-3.5 text-primary mx-auto mb-1" />
+                        <p className="text-lg font-display font-black text-primary leading-none">{verifiedEntry.position}</p>
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Position</p>
+                      </div>
+                      <div className="bg-background border border-border/60 rounded-md p-2.5 text-center">
+                        <UserCheck className="h-3.5 w-3.5 text-primary mx-auto mb-1" />
+                        <p className="text-lg font-display font-black text-foreground leading-none capitalize">{verifiedEntry.status}</p>
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Status</p>
+                      </div>
+                      <div className="bg-background border border-border/60 rounded-md p-2.5 text-center">
+                        <Clock className="h-3.5 w-3.5 text-primary mx-auto mb-1" />
+                        <p className="text-xs font-display font-black text-foreground leading-none">
+                          {verifiedEntry.joinedAt
+                            ? new Date(verifiedEntry.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : '—'}
+                        </p>
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Joined</p>
+                      </div>
+                    </div>
+
+                    {/* Custom data fields */}
+                    {verifiedEntry.customData && Object.keys(verifiedEntry.customData).length > 0 && (
+                      <div className="bg-background border border-border/60 rounded-md p-3 space-y-1.5">
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Custom Info</p>
+                        {Object.entries(verifiedEntry.customData).map(([key, val]) => (
+                          <div key={key} className="flex justify-between items-center">
+                            <span className="text-[10px] text-muted-foreground font-medium capitalize">{key}</span>
+                            <span className="text-[10px] font-bold text-foreground">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        onClick={handleServeVerified}
+                        className="flex-1 text-[10px] font-bold uppercase gap-1.5"
+                        size="sm"
+                      >
+                        <SkipForward className="h-3.5 w-3.5" />
+                        Serve Now
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => { setVerifiedEntry(null); setScanError(null); }}
+                        className="flex-1 text-[10px] font-bold uppercase"
+                        size="sm"
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Error result ── */}
+              {scanError && (
+                <div className="flex items-start gap-3 p-4 rounded-md border border-destructive/20 bg-destructive/5 animate-fade-in">
+                  <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="text-xs font-bold text-destructive uppercase tracking-wider">Verification Failed</h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed mt-1">{scanError}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Simulation helper ── */}
+              {!verifiedEntry && !scanError && (
+                <div className="p-3 bg-secondary border border-border rounded-md space-y-2">
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Verification Testing Simulator</p>
+                  <p className="text-[11px] text-muted-foreground leading-normal">
+                    No device? Click below to automatically grab the first ticket token and verify it.
+                  </p>
+                  <button
+                    onClick={handleSimulateScan}
+                    disabled={participants.length === 0 || isVerifyingToken}
+                    className="w-full py-2 border border-primary/20 hover:border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 rounded-md text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    {isVerifyingToken ? <Loader2 className="h-3 w-3 animate-spin inline mr-1" /> : null}
+                    Simulate scanning QR code
+                  </button>
                 </div>
               )}
             </div>

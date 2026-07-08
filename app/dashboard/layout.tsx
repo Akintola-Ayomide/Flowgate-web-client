@@ -1,15 +1,44 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/features/auth/context/auth-context"
 import { Sidebar } from "@/shared/ui/layout/Sidebar"
 import { Header } from "@/shared/ui/layout/Header"
+import { Loader2 } from "lucide-react"
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode
 }) {
+    const { user, isLoading } = useAuth()
+    const router = useRouter()
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
+
+    React.useEffect(() => {
+        if (!isLoading && !user) {
+            router.replace('/auth?error=session_expired')
+        }
+    }, [isLoading, user, router])
+
+    // Block rendering while auth state is resolving
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
+    }
+
+    // Don't render dashboard UI at all if unauthenticated (redirect is in-flight)
+    if (!user) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-background relative overflow-hidden">

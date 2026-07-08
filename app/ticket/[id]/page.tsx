@@ -1,11 +1,12 @@
 "use client";
 
 import { io } from "socket.io-client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api";
-import { Loader2, ArrowLeft, QrCode, Bell, AlertTriangle, Timer } from "lucide-react";
+import { Loader2, ArrowLeft, Bell, AlertTriangle, Timer, Download, CheckCircle2, Clock, Hash } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import QRCode from "qrcode";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -115,6 +116,44 @@ function usePersistedCountdown(estimatedMinutes: number | undefined, entryId: st
 }
 
 // ──────────────────────────────────────────────
+// QR Code Image Hook
+// ──────────────────────────────────────────────
+
+/**
+ * Generates a QR code data URL from a token string.
+ * Returns null while loading or if the token is empty.
+ */
+function useQrCodeDataUrl(token: string): string | null {
+    const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!token) {
+            setDataUrl(null);
+            return;
+        }
+
+        let cancelled = false;
+        QRCode.toDataURL(token, {
+            width: 280,
+            margin: 2,
+            color: {
+                dark: '#1C1C1A',
+                light: '#FAFAF8',
+            },
+            errorCorrectionLevel: 'H',
+        }).then((url) => {
+            if (!cancelled) setDataUrl(url);
+        }).catch(() => {
+            if (!cancelled) setDataUrl(null);
+        });
+
+        return () => { cancelled = true; };
+    }, [token]);
+
+    return dataUrl;
+}
+
+// ──────────────────────────────────────────────
 // Page Component
 // ──────────────────────────────────────────────
 
@@ -130,6 +169,7 @@ export default function TicketPage() {
     const socketRef = useRef<any>(null);
 
     const countdown = usePersistedCountdown(statusData?.estimatedWaitTime, (statusData?.entry?.id?.toString() ?? entryId));
+    const qrDataUrl = useQrCodeDataUrl(qrToken);
 
     useEffect(() => {
         const initialize = async () => {
@@ -218,6 +258,17 @@ export default function TicketPage() {
         }
     }
 
+    /** Download the QR code as a PNG file */
+    const handleDownloadQr = useCallback(() => {
+        if (!qrDataUrl) return;
+        const link = document.createElement('a');
+        link.href = qrDataUrl;
+        link.download = `qline-ticket-${statusData?.entry?.position ?? entryId}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }, [qrDataUrl, statusData?.entry?.position, entryId]);
+
     if (isLoading) {
         return (
             <div className="min-h-screen bg-background flex justify-center items-center">
@@ -260,6 +311,8 @@ export default function TicketPage() {
             ? "text-accent"
             : "text-primary";
 
+    const isReady = countdown.secondsLeft === 0 && estimatedWaitTime !== undefined;
+
     return (
         <div className="min-h-screen bg-background py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
             {/* Background Texture */}
@@ -276,39 +329,88 @@ export default function TicketPage() {
                     Back
                 </button>
 
-                {/* Ticket Card */}
-                <div className="bg-background rounded-md shadow-xs border border-border/80 p-6 md:p-8 flex flex-col items-center">
-                    <div className="bg-primary/10 text-primary border border-primary/20 px-5 py-2 rounded-sm text-4xl font-display font-black tracking-wider mb-2">
-                        {ticketNumber}
-                    </div>
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-8">
-                        Your Ticket Code
+                {/* ── Ticket Card ── */}
+                <div className="bg-background rounded-md shadow-xs border border-border/80 overflow-hidden">
+                    {/* Ticket header strip */}
+                    <div className="bg-primary/8 border-b border-border/60 px-6 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center">
+                                <Hash className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Your Ticket</p>
+                                <p className="text-lg font-display font-black text-primary tracking-tight leading-none">{ticketNumber}</p>
+                            </div>
+                        </div>
+                        {isReady && (
+                            <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-sm">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider">Your Turn!</span>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="w-44 h-44 bg-secondary border border-border/80 rounded-md flex flex-col items-center justify-center mb-8 p-4 shadow-xs">
-                        <QrCode className="h-20 w-20 text-muted-foreground/60 mb-3" />
-                        <span className="text-[9px] font-mono text-muted-foreground/75 break-all text-center leading-normal max-w-full">
-                            {qrToken || 'TOKEN_PENDING'}
-                        </span>
+                    {/* QR Code area */}
+                    <div className="flex flex-col items-center px-6 py-8">
+                        <div className="relative">
+                            {/* QR frame */}
+                            <div className="w-52 h-52 bg-[#FAFAF8] border-2 border-border rounded-md flex items-center justify-center shadow-xs overflow-hidden relative">
+                                {qrDataUrl ? (
+                                    <img
+                                        src={qrDataUrl}
+                                        alt={`QR Code for ticket ${ticketNumber}`}
+                                        className="w-full h-full object-contain p-2"
+                                        draggable={false}
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/40" />
+                                        <span className="text-[9px] text-muted-foreground/60 font-mono">Generating...</span>
+                                    </div>
+                                )}
+                                {/* Corner brackets overlay */}
+                                <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-primary/40 rounded-tl-sm pointer-events-none" />
+                                <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-primary/40 rounded-tr-sm pointer-events-none" />
+                                <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-primary/40 rounded-bl-sm pointer-events-none" />
+                                <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-primary/40 rounded-br-sm pointer-events-none" />
+                            </div>
+                        </div>
+
+                        <p className="mt-3 text-[9px] text-muted-foreground/70 font-mono text-center max-w-[200px] break-all leading-relaxed">
+                            {qrToken ? qrToken.slice(0, 32) + '…' : '—'}
+                        </p>
+
+                        {/* Download button */}
+                        {qrDataUrl && (
+                            <button
+                                onClick={handleDownloadQr}
+                                className="mt-3 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors cursor-pointer group"
+                            >
+                                <Download className="h-3.5 w-3.5 group-hover:translate-y-0.5 transition-transform" />
+                                Download QR
+                            </button>
+                        )}
                     </div>
 
-                    <div className="w-full space-y-3 border-t border-border/60 pt-4">
+                    {/* Ticket details */}
+                    <div className="border-t border-dashed border-border/60 mx-4 mb-4" />
+                    <div className="px-6 pb-6 space-y-0">
                         {queue && (
-                            <div className="flex justify-between items-center py-2 text-sm">
-                                <span className="text-muted-foreground font-medium">Queue</span>
-                                <span className="text-foreground font-bold">{queue.name}</span>
+                            <div className="flex justify-between items-center py-2.5 border-b border-border/40 text-sm">
+                                <span className="text-muted-foreground font-medium text-xs">Queue</span>
+                                <span className="text-foreground font-bold text-xs">{queue.name}</span>
                             </div>
                         )}
                         {queue?.owner && (
-                            <div className="flex justify-between items-center py-2 text-sm border-t border-border/40">
-                                <span className="text-muted-foreground font-medium">Owner</span>
-                                <span className="text-foreground font-bold">{queue.owner.name}</span>
+                            <div className="flex justify-between items-center py-2.5 border-b border-border/40 text-sm">
+                                <span className="text-muted-foreground font-medium text-xs">Organiser</span>
+                                <span className="text-foreground font-bold text-xs">{queue.owner.name}</span>
                             </div>
                         )}
                         {entry?.joinedAt && (
-                            <div className="flex justify-between items-center py-2 text-sm border-t border-border/40">
-                                <span className="text-muted-foreground font-medium">Joined At</span>
-                                <span className="text-foreground font-bold">
+                            <div className="flex justify-between items-center py-2.5 text-sm">
+                                <span className="text-muted-foreground font-medium text-xs flex items-center gap-1"><Clock className="h-3 w-3" /> Joined At</span>
+                                <span className="text-foreground font-bold text-xs">
                                     {new Date(entry.joinedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                             </div>

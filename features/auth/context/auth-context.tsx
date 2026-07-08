@@ -18,7 +18,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { User, LoginDTO, SignupDTO } from '../types';
 import { authApi } from '../services/auth.api';
 import { setToken, clearToken, hasToken, getToken } from '../services/token.storage';
@@ -54,6 +54,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const router = useRouter();
 
     /**
      * Verify auth state on mount.
@@ -84,16 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         checkAuth();
     }, [checkAuth]);
 
-    const pathname = usePathname();
-    const router = useRouter();
-
-    // Redirect to login page if user is unauthenticated on a protected dashboard route
-    useEffect(() => {
-        if (!isLoading && !user && pathname.startsWith('/dashboard')) {
-            router.push('/auth?error=session_expired');
-        }
-    }, [isLoading, user, pathname, router]);
-
     // Listen to global 401 unauthorized events to instantly log out the user
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -101,13 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const handleUnauthorized = () => {
             clearToken();
             setUser(null);
+            // Redirect to login page — the token is expired or invalid
+            router.replace('/auth?error=session_expired');
         };
 
         window.addEventListener('auth-unauthorized', handleUnauthorized);
         return () => {
             window.removeEventListener('auth-unauthorized', handleUnauthorized);
         };
-    }, []);
+    }, [router]);
 
     // ── Actions ────────────────────────────────────
 

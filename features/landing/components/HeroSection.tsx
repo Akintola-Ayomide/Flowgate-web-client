@@ -57,7 +57,7 @@ export function HeroSection() {
 
                     {/* Headline */}
                     <motion.h1
-                        className="text-5xl md:text-7xl lg:text-8xl font-display font-black tracking-tight text-foreground leading-[1.05]"
+                        className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-display font-black tracking-tight text-foreground leading-[1.05]"
                         variants={itemVariants}
                     >
                         Seamless <span className="text-gradient">Workflow</span> &<br /> 

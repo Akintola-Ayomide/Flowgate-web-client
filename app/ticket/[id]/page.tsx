@@ -2,9 +2,9 @@
 
 import { io } from "socket.io-client";
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api";
-import { Loader2, ArrowLeft, Bell, AlertTriangle, Timer, Download, CheckCircle2, Clock, Hash } from "lucide-react";
+import { Loader2, ArrowLeft, Bell, AlertTriangle, Timer, Download, CheckCircle2, Clock, Hash, WifiOff } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import QRCode from "qrcode";
 
@@ -160,9 +160,11 @@ function useQrCodeDataUrl(token: string): string | null {
 export default function TicketPage() {
     const params = useParams()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const entryId = params.id as string
 
     const [isLoading, setIsLoading] = useState(true)
+    const [isError, setIsError] = useState(false)
     const [statusData, setStatusData] = useState<QueueStatusResponse | null>(null)
     const [queueId, setQueueId] = useState<number | null>(null)
     const [qrToken, setQrToken] = useState<string>("")
@@ -172,7 +174,7 @@ export default function TicketPage() {
     const qrDataUrl = useQrCodeDataUrl(qrToken);
 
     useEffect(() => {
-        const initialize = async () => {
+        const initialize = async (isRetry = false) => {
             try {
                 const joinedQueues = await queueApi.getJoinedQueues()
                 const match = joinedQueues.find(j => String(j.entry.id) === entryId)
@@ -183,7 +185,7 @@ export default function TicketPage() {
                     const status = await queueApi.getQueueStatus(match.queue.id)
                     setStatusData(status)
                 } else {
-                    // Fallback assuming the ID passed was actually a queue ID
+                    // Fallback: ID may be a queue ID rather than an entry ID
                     const numId = Number(entryId)
                     if (!isNaN(numId)) {
                         const status = await queueApi.getQueueStatus(numId)
@@ -192,15 +194,36 @@ export default function TicketPage() {
                         if (status.entry) {
                             setQrToken(status.entry.qrCodeToken)
                         }
+                    } else if (!isRetry) {
+                        // If we came from /join, the backend may not have committed
+                        // the new entry yet. Retry once after a short delay.
+                        const fromJoin = searchParams.get('from') === 'join'
+                        if (fromJoin) {
+                            setTimeout(() => initialize(true), 1500)
+                            return // Keep isLoading=true during the retry window
+                        }
                     }
                 }
             } catch (err) {
                 console.warn("Failed to load ticket:", err)
+                if (!isRetry) {
+                    // Retry once on network errors (e.g. transient backend cold-start)
+                    setTimeout(() => initialize(true), 1500)
+                    return
+                }
+                setIsError(true)
             } finally {
-                setIsLoading(false)
+                if (isRetry) setIsLoading(false)
+                else if (!searchParams.get('from')) setIsLoading(false)
             }
         }
-        if (entryId) initialize()
+        if (entryId) {
+            initialize()
+            // Always resolve loading after 8s max to avoid infinite spinner
+            const safetyTimer = setTimeout(() => setIsLoading(false), 8000)
+            return () => clearTimeout(safetyTimer)
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entryId])
 
     useEffect(() => {
@@ -273,6 +296,27 @@ export default function TicketPage() {
         return (
             <div className="min-h-screen bg-background flex justify-center items-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
+    }
+
+    if (isError) {
+        return (
+            <div className="min-h-screen bg-background flex flex-col justify-center items-center px-4 text-center relative overflow-hidden">
+                <div className="absolute inset-0 dot-grid opacity-[0.1] pointer-events-none" />
+                <div className="relative z-10 max-w-sm space-y-4">
+                    <WifiOff className="h-12 w-12 text-destructive mx-auto" />
+                    <h1 className="text-xl font-display font-bold text-foreground">Connection Error</h1>
+                    <p className="text-xs text-muted-foreground font-medium leading-relaxed">We couldn't load your ticket. Please check your connection or try again.</p>
+                    <Button 
+                        onClick={() => window.location.reload()}
+                        variant="primary"
+                        size="default"
+                        className="w-full text-xs font-bold uppercase"
+                    >
+                        Try Again
+                    </Button>
+                </div>
             </div>
         )
     }

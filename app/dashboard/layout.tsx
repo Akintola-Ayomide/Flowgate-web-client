@@ -22,7 +22,8 @@ export default function DashboardLayout({
         }
     }, [isLoading, user, router])
 
-    // Block rendering while auth state is resolving
+    // Only show the full-screen spinner while auth state is actively resolving.
+    // This has a 10-second maximum (matching the checkAuth timeout in auth-context).
     if (isLoading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -31,13 +32,11 @@ export default function DashboardLayout({
         )
     }
 
-    // Don't render dashboard UI at all if unauthenticated (redirect is in-flight)
+    // Auth resolved but no user — redirect is in-flight.
+    // Return null rather than another spinner so the router can complete
+    // the navigation without a persistent loading screen blocking it.
     if (!user) {
-        return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        )
+        return null
     }
 
     return (

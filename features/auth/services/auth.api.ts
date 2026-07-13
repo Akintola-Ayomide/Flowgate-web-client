@@ -144,9 +144,10 @@ class AuthApiService {
     /**
      * Fetches the current user profile.
      * Uses Bearer token if present; falls back to cookie-based auth for same-domain.
+     * Accepts an optional AbortSignal so callers can impose a timeout.
      */
-    async getProfile(): Promise<User> {
-        return this.request<User>('/auth/me');
+    async getProfile(signal?: AbortSignal): Promise<User> {
+        return this.request<User>('/auth/me', { signal });
     }
 
     async logout(): Promise<void> {

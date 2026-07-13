@@ -55,19 +55,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
+    /**
+     * Guards against multiple concurrent 401 responses (e.g. two in-flight API
+     * calls both returning 401) from calling router.replace() more than once,
+     * which can cause navigation to stall or loop.
+     */
+    const isHandlingUnauthorized = React.useRef(false);
 
     /**
      * Verify auth state on mount.
-     * Calls `/auth/me` — the API service will attach the Bearer token from
-     * localStorage if one exists, so this works even cross-domain.
+     * Calls `/auth/me` with a 10-second AbortController timeout so that a
+     * slow or unreachable backend never leaves isLoading stuck at true.
      */
     const checkAuth = useCallback(async () => {
         setIsLoading(true);
         const tokenAtStart = getToken();
+
+        // 10-second hard timeout — if the backend doesn't respond, we bail out
+        // and treat the user as unauthenticated rather than hanging forever.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
         try {
-            const profile = await authApi.getProfile();
+            const profile = await authApi.getProfile(controller.signal);
             setUser(profile);
-        } catch {
+        } catch (err: any) {
+            // AbortError means we timed out — not a genuine 401.
             // Only clear state when genuinely unauthenticated.
             // A concurrent flow (e.g. handleGoogleCallback) may have stored a
             // token in localStorage while this request was in-flight — if so,
@@ -77,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(null);
             }
         } finally {
+            clearTimeout(timeoutId);
             setIsLoading(false);
         }
     }, []);
@@ -85,15 +99,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         checkAuth();
     }, [checkAuth]);
 
-    // Listen to global 401 unauthorized events to instantly log out the user
+    // Listen to global 401 unauthorized events to instantly log out the user.
+    // The deduplication ref prevents multiple parallel 401 responses from
+    // calling router.replace() concurrently, which can stall navigation.
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
         const handleUnauthorized = () => {
+            if (isHandlingUnauthorized.current) return;
+            isHandlingUnauthorized.current = true;
+
             clearToken();
             setUser(null);
-            // Redirect to login page — the token is expired or invalid
+            // Redirect to login page — the token is expired or invalid.
             router.replace('/auth?error=session_expired');
+
+            // Reset the flag after navigation settles so future logouts work.
+            setTimeout(() => { isHandlingUnauthorized.current = false; }, 3000);
         };
 
         window.addEventListener('auth-unauthorized', handleUnauthorized);

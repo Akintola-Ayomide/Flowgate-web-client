@@ -7,12 +7,32 @@ import {
   Loader2, AlertTriangle, ArrowLeft, Play, Pause, 
   EllipsisVertical, RefreshCw, Users, Camera, Plus, 
   Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle, Trash2,
-  ScanLine, UserCheck, Hash, Clock, SkipForward, WifiOff
+  ScanLine, UserCheck, Hash, Clock, SkipForward, WifiOff, MapPin
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/utils";
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
+
+// Helper to parse description + address + image
+function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+    if (!description) {
+        return { desc: 'No description provided.', address: null, imageUrl: null };
+    }
+    try {
+        const parsed = JSON.parse(description);
+        if (parsed && typeof parsed === 'object') {
+            return {
+                desc: parsed.desc || 'No description provided.',
+                address: parsed.address || null,
+                imageUrl: parsed.image || null
+            };
+        }
+    } catch {
+        // Fallback for plain text descriptions
+    }
+    return { desc: description, address: null, imageUrl: null };
+}
 
 // ── Type augmentation for BarcodeDetector (not yet in lib.dom) ──
 declare global {
@@ -344,6 +364,7 @@ export default function ManageQueuePage() {
     );
   }
 
+  const { desc, address, imageUrl } = parseQueueDetails(queue.description);
   const activeCount = participants.length;
 
   return (
@@ -389,19 +410,36 @@ export default function ManageQueuePage() {
       {/* Meta Card */}
       <div className="rounded-md bg-background p-6 border border-border/80 shadow-xs relative overflow-hidden">
         <div className="absolute inset-0 dot-grid opacity-[0.1] pointer-events-none" />
-        <div className="flex justify-between items-start border-b border-border/60 pb-4 mb-5 relative z-10">
-          <div>
-            <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{queue.name}</h2>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">ID: {queue.id}</p>
-            {queue.description && (
-              <p className="text-xs text-muted-foreground font-medium mt-1.5 max-w-xl">
-                {/* Check if description contains serialized details */}
-                {queue.description.startsWith("{") ? JSON.parse(queue.description).desc : queue.description}
-              </p>
+        <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-border/60 pb-4 mb-5 relative z-10">
+          <div className="flex flex-col sm:flex-row gap-4 items-start flex-1 min-w-0">
+            {imageUrl && (
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-md overflow-hidden bg-secondary border border-border/60 shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={imageUrl} 
+                  alt={queue.name} 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
             )}
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{queue.name}</h2>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">ID: {queue.id}</p>
+              {desc && (
+                <p className="text-xs text-muted-foreground font-medium mt-1.5 max-w-xl leading-relaxed">
+                  {desc}
+                </p>
+              )}
+              {address && (
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-2 flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>{address}</span>
+                </p>
+              )}
+            </div>
           </div>
           <span
-            className={`rounded-sm border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            className={`rounded-sm border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 md:mt-0 mt-2 ${
               queueActive ? "bg-primary/10 text-primary border-primary/20" : "bg-secondary text-muted-foreground border-border/60"
             }`}
           >

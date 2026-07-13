@@ -22,6 +22,26 @@ function StatusBadge({ status }: { status: QueueStatus }) {
     )
 }
 
+// Helper to parse description + address + image
+function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+    if (!description) {
+        return { desc: 'No description provided.', address: null, imageUrl: null };
+    }
+    try {
+        const parsed = JSON.parse(description);
+        if (parsed && typeof parsed === 'object') {
+            return {
+                desc: parsed.desc || 'No description provided.',
+                address: parsed.address || null,
+                imageUrl: parsed.image || null
+            };
+        }
+    } catch {
+        // Fallback for plain text descriptions
+    }
+    return { desc: description, address: null, imageUrl: null };
+}
+
 export default function QueuesPage() {
     const [queues, setQueues] = React.useState<Queue[]>([])
     const [isLoading, setIsLoading] = React.useState(true)
@@ -184,13 +204,28 @@ export default function QueuesPage() {
                                 {filtered.map((queue) => {
                                     const waiting = queue.activeParticipants ?? queue.inLine ?? 0
                                     const pct = Math.min((waiting / queue.maxParticipants) * 100, 100)
+                                    const { desc, imageUrl } = parseQueueDetails(queue.description)
                                     return (
                                         <tr key={queue.id} className="hover:bg-secondary/35 transition-colors">
                                             <td className="px-6 py-4 font-semibold text-foreground">
-                                                <div>{queue.name}</div>
-                                                {queue.description && (
-                                                    <div className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-xs">{queue.description}</div>
-                                                )}
+                                                <div className="flex items-center gap-3">
+                                                    {imageUrl && (
+                                                        <div className="h-8 w-8 rounded-sm overflow-hidden bg-secondary shrink-0 border border-border/50">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img 
+                                                                src={imageUrl} 
+                                                                alt={queue.name} 
+                                                                className="w-full h-full object-cover" 
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    <div className="min-w-0">
+                                                        <div className="truncate font-bold">{queue.name}</div>
+                                                        {desc && (
+                                                            <div className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-xs">{desc}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4"><StatusBadge status={queue.status} /></td>
                                             <td className="px-6 py-4 text-muted-foreground font-semibold">{waiting}</td>
@@ -246,14 +281,27 @@ export default function QueuesPage() {
                         {filtered.map((queue) => {
                             const waiting = queue.activeParticipants ?? queue.inLine ?? 0
                             const pct = Math.min((waiting / queue.maxParticipants) * 100, 100)
+                            const { desc, imageUrl } = parseQueueDetails(queue.description)
                             return (
                                 <div key={queue.id} className="bg-background border border-border/80 rounded-md p-4 shadow-xs">
                                     <div className="flex items-start justify-between gap-3 mb-3">
-                                        <div className="min-w-0">
-                                            <p className="font-semibold text-foreground text-sm truncate">{queue.name}</p>
-                                            {queue.description && (
-                                                <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate">{queue.description}</p>
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {imageUrl && (
+                                                <div className="h-10 w-10 rounded-sm overflow-hidden bg-secondary shrink-0 border border-border/50">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img 
+                                                        src={imageUrl} 
+                                                        alt={queue.name} 
+                                                        className="w-full h-full object-cover" 
+                                                    />
+                                                </div>
                                             )}
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-foreground text-sm truncate">{queue.name}</p>
+                                                {desc && (
+                                                    <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate">{desc}</p>
+                                                )}
+                                            </div>
                                         </div>
                                         <StatusBadge status={queue.status} />
                                     </div>

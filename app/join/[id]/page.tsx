@@ -3,15 +3,17 @@
 import React, { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { queueApi, Queue } from "@/features/Queue/services/queue.api"
-import { Loader2, ArrowLeft, Users, Clock, Info, AlertTriangle, MapPin, Map, X } from "lucide-react";
+import { Loader2, ArrowLeft, Users, Clock, Info, AlertTriangle, MapPin, Map, X, Share2, Check } from "lucide-react";
 import { useAuth } from "@/features/auth/context/auth-context"
+import { useToast } from "@/shared/context/toast-context"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
+import { ShareQueueModal } from "@/shared/ui/share-queue-modal"
 
 // Helper to parse description + address + image
-function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+function parseQueueDetails(description: string | null, imageFallback?: string | null): { desc: string; address: string | null; imageUrl: string | null } {
     if (!description) {
-        return { desc: 'No description provided.', address: null, imageUrl: null };
+        return { desc: 'No description provided.', address: null, imageUrl: imageFallback || null };
     }
     try {
         const parsed = JSON.parse(description);
@@ -19,13 +21,13 @@ function parseQueueDetails(description: string | null): { desc: string; address:
             return {
                 desc: parsed.desc || 'No description provided.',
                 address: parsed.address || null,
-                imageUrl: parsed.image || null
+                imageUrl: imageFallback || parsed.image || null
             };
         }
     } catch {
         // Fallback for plain text descriptions
     }
-    return { desc: description, address: null, imageUrl: null };
+    return { desc: description, address: null, imageUrl: imageFallback || null };
 }
 
 export default function JoinQueuePage() {
@@ -42,6 +44,8 @@ export default function JoinQueuePage() {
     const [guestPhone, setGuestPhone] = useState<string>('');
     const [customData, setCustomData] = useState<Record<string, any>>({});
     const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const toast = useToast();
 
     useEffect(() => {
         queueApi.getQueue(queueId)
@@ -58,7 +62,7 @@ export default function JoinQueuePage() {
             // If user is not authenticated, perform guest login first
             if (!isAuthenticated) {
                 if (!guestName.trim()) {
-                    alert("Please provide a name to join as guest.");
+                    toast.error("Name required", "Please provide a name to join as guest.");
                     setIsJoining(false);
                     return;
                 }
@@ -68,9 +72,10 @@ export default function JoinQueuePage() {
             // Prepare custom data for joining queue
             const data = { ...customData };
             const result = await queueApi.joinQueue(queue.id, data);
+            toast.success("Joined queue!", `You are position #${result.entry.position}.`);
             router.replace(`/ticket/${result.entry.id}`);
         } catch (err: any) {
-            alert(err.message || "Failed to join queue.");
+            toast.error("Failed to join queue", err.message || "An unexpected error occurred.");
         } finally {
             setIsJoining(false);
         }
@@ -100,7 +105,7 @@ export default function JoinQueuePage() {
         )
     }
 
-    const { desc, address, imageUrl } = parseQueueDetails(queue.description);
+    const { desc, address, imageUrl } = parseQueueDetails(queue.description, queue.image);
 
     return (
         <div className="min-h-screen bg-background py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -132,13 +137,23 @@ export default function JoinQueuePage() {
                     )}
                     <form onSubmit={handleJoin} className="p-6 md:p-8 space-y-6">
                         <div className="flex items-start justify-between gap-4 pb-4 border-b border-border/60">
-                            <div>
-                                <h1 className="text-xl font-display font-bold text-foreground tracking-tight">{queue.name}</h1>
-                                {queue.owner && (
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mt-1">Managed by {queue.owner.name}</p>
-                                )}
+                            <div className="min-w-0 flex-1">
+                                <h1 className="text-xl font-display font-bold text-foreground tracking-tight truncate">{queue.name}</h1>
+                                <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mt-1">
+                                    {queue.owner && (
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Managed by {queue.owner.name}</p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowShareModal(true)}
+                                        className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer font-bold uppercase tracking-wider bg-transparent border-0 p-0"
+                                    >
+                                        <Share2 className="w-3.5 h-3.5" />
+                                        <span>Share Queue</span>
+                                    </button>
+                                </div>
                             </div>
-                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border ${
+                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border shrink-0 ${
                                 queue.status === 'active' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-secondary text-muted-foreground border-border/60'
                             }`}>
                                 {queue.status}
@@ -146,7 +161,7 @@ export default function JoinQueuePage() {
                         </div>
 
                         {desc && (
-                            <p className="text-sm text-muted-foreground leading-relaxed font-medium">
+                            <p className="text-sm text-muted-foreground leading-relaxed font-medium break-words">
                                 {desc}
                             </p>
                         )}
@@ -186,7 +201,16 @@ export default function JoinQueuePage() {
                         {/* Guest signup inputs if they're anonymous */}
                         {!isAuthenticated && (
                             <div className="space-y-4 border-t border-border/60 pt-5">
-                                <h3 className="font-display text-xs font-bold tracking-wider text-muted-foreground uppercase">Guest Information</h3>
+                                <div className="flex items-center justify-between">
+                                    <h3 className="font-display text-xs font-bold tracking-wider text-muted-foreground uppercase">Guest Information</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push(`/auth?redirect=/join/${queueId}`)}
+                                        className="text-xs font-bold text-primary hover:underline cursor-pointer bg-transparent border-0 p-0"
+                                    >
+                                        Sign in to use account
+                                    </button>
+                                </div>
                                 <Input
                                     label="Your Name *"
                                     placeholder="Enter your name"
@@ -245,6 +269,11 @@ export default function JoinQueuePage() {
                     </form>
                 </div>
             </div>
+
+            {/* Share Queue Modal */}
+            {showShareModal && (
+                <ShareQueueModal queueId={queueId} queueName={queue?.name || "Queue"} onClose={() => setShowShareModal(false)} />
+            )}
 
             {/* Google Maps Embed Modal */}
             {selectedAddress && (

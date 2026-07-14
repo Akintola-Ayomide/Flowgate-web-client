@@ -4,11 +4,12 @@ import React, { useEffect, useState } from "react"
 import { queueApi, Queue } from "@/features/Queue/services/queue.api"
 import { Loader2, Search, ArrowRight, Clock, Users, MapPin, Map, X } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/shared/context/toast-context"
 
 // Helper to parse description + address + image
-function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+function parseQueueDetails(description: string | null, imageFallback?: string | null): { desc: string; address: string | null; imageUrl: string | null } {
     if (!description) {
-        return { desc: 'No description provided.', address: null, imageUrl: null };
+        return { desc: 'No description provided.', address: null, imageUrl: imageFallback || null };
     }
     try {
         const parsed = JSON.parse(description);
@@ -16,13 +17,13 @@ function parseQueueDetails(description: string | null): { desc: string; address:
             return {
                 desc: parsed.desc || 'No description provided.',
                 address: parsed.address || null,
-                imageUrl: parsed.image || null
+                imageUrl: imageFallback || parsed.image || null
             };
         }
     } catch {
         // Fallback for plain text descriptions
     }
-    return { desc: description, address: null, imageUrl: null };
+    return { desc: description, address: null, imageUrl: imageFallback || null };
 }
 
 // Default premium image fallback
@@ -30,6 +31,7 @@ const DEFAULT_BUSINESS_IMAGE = "https://images.unsplash.com/photo-1486406146926-
 
 export default function BrowseQueuesPage() {
     const router = useRouter()
+    const toast = useToast()
     const [queues, setQueues] = useState<Queue[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
@@ -40,7 +42,7 @@ export default function BrowseQueuesPage() {
     useEffect(() => {
         queueApi.getAllActiveQueues()
             .then(data => setQueues(data))
-            .catch(console.error)
+            .catch(() => toast.error("Failed to load queues", "Please try again later."))
             .finally(() => setIsLoading(false))
     }, [])
 
@@ -85,7 +87,7 @@ export default function BrowseQueuesPage() {
             ) : filteredQueues.length > 0 ? (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                     {filteredQueues.map(queue => {
-                        const { desc, address, imageUrl } = parseQueueDetails(queue.description);
+                        const { desc, address, imageUrl } = parseQueueDetails(queue.description, queue.image);
                         const finalImage = imageUrl || DEFAULT_BUSINESS_IMAGE;
 
                         return (

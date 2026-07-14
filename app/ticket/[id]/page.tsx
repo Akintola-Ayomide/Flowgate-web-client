@@ -4,7 +4,9 @@ import { io } from "socket.io-client";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { queueApi, QueueStatusResponse } from "@/features/Queue/services/queue.api";
-import { Loader2, ArrowLeft, Bell, AlertTriangle, Timer, Download, CheckCircle2, Clock, Hash, WifiOff } from "lucide-react";
+import { Loader2, ArrowLeft, Bell, AlertTriangle, Timer, Download, CheckCircle2, Clock, Hash, WifiOff, Share2 } from "lucide-react";
+import { ShareQueueModal } from "@/shared/ui/share-queue-modal";
+import { useToast } from "@/shared/context/toast-context"
 import { Button } from "@/shared/ui/button";
 import QRCode from "qrcode";
 
@@ -168,6 +170,8 @@ export default function TicketPage() {
     const [statusData, setStatusData] = useState<QueueStatusResponse | null>(null)
     const [queueId, setQueueId] = useState<number | null>(null)
     const [qrToken, setQrToken] = useState<string>("")
+    const [showShareModal, setShowShareModal] = useState(false)
+    const toast = useToast();
     const socketRef = useRef<any>(null);
 
     const countdown = usePersistedCountdown(statusData?.estimatedWaitTime, (statusData?.entry?.id?.toString() ?? entryId));
@@ -244,14 +248,27 @@ export default function TicketPage() {
             }
         };
         // Listen for updates and refresh
-        socket.on('queueShifted', fetchStatus);
-        socket.on('nextServed', fetchStatus);
-        socket.on('userPrioritized', fetchStatus);
+        socket.on('queueShifted', () => {
+            fetchStatus();
+            toast.info("Queue updated", "Your position may have changed.");
+        });
+        socket.on('nextServed', () => {
+            fetchStatus();
+            toast.success("Your turn!", "The queue operator is ready for you.");
+        });
+        socket.on('userPrioritized', () => {
+            fetchStatus();
+            toast.info("Position updated", "A participant's position has changed.");
+        });
         socket.on('userJoined', fetchStatus);
         socket.on('userLeft', fetchStatus);
-        socket.on('queueStatusChanged', fetchStatus);
+        socket.on('queueStatusChanged', (data: { queueId: number; status: string }) => {
+            fetchStatus();
+            toast.info("Queue status changed", `Queue is now ${data.status}.`);
+        });
         // If the queue is deleted while the user is waiting, send them home.
         socket.on('queueDeleted', () => {
+            toast.warning("Queue deleted", "This queue has been removed.");
             router.replace('/dashboard?queue_deleted=1');
         });
         
@@ -272,9 +289,10 @@ export default function TicketPage() {
                     localStorage.removeItem(timerKey(statusData.entry.id.toString()));
                 }
                 setStatusData(null);
+                toast.info("Left queue", "You have been removed from the waitlist.");
                 router.replace('/dashboard');
             } catch (err) {
-                alert("Failed to leave queue. Please try again.");
+                toast.error("Failed to leave queue", "Please try again.");
             }
         } else {
             router.back();
@@ -503,6 +521,17 @@ export default function TicketPage() {
                     </div>
                 </div>
 
+                {/* Share Queue Button */}
+                {queue && (
+                    <button
+                        onClick={() => setShowShareModal(true)}
+                        className="w-full flex items-center justify-center px-4 py-3 border border-border bg-background hover:bg-secondary rounded-md text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer gap-2"
+                    >
+                        <Share2 className="h-4 w-4 text-muted-foreground" />
+                        Share This Queue
+                    </button>
+                )}
+
                 {/* Leave Queue Button */}
                 <button
                     onClick={handleLeaveQueue}
@@ -511,6 +540,11 @@ export default function TicketPage() {
                     Leave Queue waitlist
                 </button>
             </div>
+
+            {/* Share Queue Modal */}
+            {showShareModal && queue && (
+                <ShareQueueModal queueId={queue.id} queueName={queue.name} onClose={() => setShowShareModal(false)} />
+            )}
         </div>
     )
 }

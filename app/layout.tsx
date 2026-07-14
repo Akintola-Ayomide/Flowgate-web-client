@@ -3,6 +3,7 @@ import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/features/auth/context/auth-context";
 import { ThemeProvider } from "@/shared/context/theme-context";
+import { ToastProvider } from "@/shared/context/toast-context";
 
 const sans = Plus_Jakarta_Sans({
   variable: "--font-sans",
@@ -34,7 +35,9 @@ export default function RootLayout({
         <div className="grain-overlay" />
         <ThemeProvider>
           <AuthProvider>
-            {children}
+            <ToastProvider>
+              {children}
+            </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

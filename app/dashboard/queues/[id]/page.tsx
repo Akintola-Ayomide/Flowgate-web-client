@@ -7,17 +7,21 @@ import {
   Loader2, AlertTriangle, ArrowLeft, Play, Pause, 
   EllipsisVertical, RefreshCw, Users, Camera, Plus, 
   Sparkles, X, AlertCircle, CheckCircle2, ArrowUpCircle, Trash2,
-  ScanLine, UserCheck, Hash, Clock, SkipForward, WifiOff, MapPin
+  ScanLine, UserCheck, Hash, Clock, SkipForward, WifiOff, MapPin,
+  Share2, Check, Edit3
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/utils";
+import { ShareQueueModal } from "@/shared/ui/share-queue-modal";
+import { EditQueueModal } from "@/shared/ui/edit-queue-modal";
+import { useToast } from "@/shared/context/toast-context"
 import { queueApi, Queue, QueueEntry } from "@/features/Queue/services/queue.api";
 
 // Helper to parse description + address + image
-function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+function parseQueueDetails(description: string | null, imageFallback?: string | null): { desc: string; address: string | null; imageUrl: string | null } {
     if (!description) {
-        return { desc: 'No description provided.', address: null, imageUrl: null };
+        return { desc: 'No description provided.', address: null, imageUrl: imageFallback || null };
     }
     try {
         const parsed = JSON.parse(description);
@@ -25,13 +29,13 @@ function parseQueueDetails(description: string | null): { desc: string; address:
             return {
                 desc: parsed.desc || 'No description provided.',
                 address: parsed.address || null,
-                imageUrl: parsed.image || null
+                imageUrl: imageFallback || parsed.image || null
             };
         }
     } catch {
         // Fallback for plain text descriptions
     }
-    return { desc: description, address: null, imageUrl: null };
+    return { desc: description, address: null, imageUrl: imageFallback || null };
 }
 
 // ── Type augmentation for BarcodeDetector (not yet in lib.dom) ──
@@ -61,6 +65,9 @@ export default function ManageQueuePage() {
   // Modals / Overlays states
   const [showScanner, setShowScanner] = useState(false);
   const [showAddGuest, setShowAddGuest] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const toast = useToast();
   const [prioritizingEntry, setPrioritizingEntry] = useState<QueueEntry | null>(null);
   const [targetPosition, setTargetPosition] = useState<number>(1);
 
@@ -113,14 +120,33 @@ export default function ManageQueuePage() {
     socketRef.current = socket;
     socket.emit("joinQueueRoom", { queueId });
 
-    socket.on("queueShifted", fetchData);
-    socket.on("nextServed", fetchData);
-    socket.on("userPrioritized", fetchData);
-    socket.on("userJoined", fetchData);
-    socket.on("userLeft", fetchData);
-    socket.on("queueStatusChanged", fetchData);
+    socket.on("queueShifted", () => {
+      fetchData();
+      toast.info("Queue shifted", "Positions have been updated.");
+    });
+    socket.on("nextServed", (entry: QueueEntry) => {
+      fetchData();
+      toast.success("Served", `${entry.user?.name || "Participant"} has been served.`);
+    });
+    socket.on("userPrioritized", (data: { userId: number; newPosition: number }) => {
+      fetchData();
+      toast.info("Participant moved", `Moved to position #${data.newPosition}.`);
+    });
+    socket.on("userJoined", (entry: QueueEntry) => {
+      fetchData();
+      toast.info("New participant", `${entry.user?.name || "Someone"} joined the queue.`);
+    });
+    socket.on("userLeft", (data: { userId: number }) => {
+      fetchData();
+      toast.info("Participant left", "A participant left the queue.");
+    });
+    socket.on("queueStatusChanged", (data: { queueId: number; status: string }) => {
+      fetchData();
+      toast.info("Queue status changed", `Queue is now ${data.status}.`);
+    });
     // If this queue gets deleted (e.g. from another tab), go back to list.
     socket.on("queueDeleted", () => {
+      toast.warning("Queue deleted", "This queue has been removed.");
       router.replace('/dashboard/queues');
     });
 
@@ -135,8 +161,9 @@ export default function ManageQueuePage() {
     try {
       await queueApi.updateStatus(queue.id, newStatus ? "active" : "paused");
       setQueueActive(newStatus);
+      toast.success(`Queue ${newStatus ? "resumed" : "paused"}`, `Queue is now accepting ${newStatus ? "new joiners" : "no more joiners"}.`);
     } catch (e) {
-      alert("Failed to update queue status");
+      toast.error("Failed to update queue status");
     }
   };
 
@@ -145,8 +172,9 @@ export default function ManageQueuePage() {
     setIsServing(true);
     try {
       await queueApi.serveNext(queue.id);
+      toast.success("Called next", "The next person has been notified.");
     } catch (e) {
-      alert("Failed to serve next user");
+      toast.error("Failed to serve next user");
     } finally {
       setIsServing(false);
     }
@@ -157,9 +185,10 @@ export default function ManageQueuePage() {
     try {
       await queueApi.prioritizeUser(queue.id, userId, pos);
       setPrioritizingEntry(null);
+      toast.info("Participant moved", `Moved to position #${pos}.`);
       fetchData(); // Trigger manual refresh in case socket takes time
     } catch (e) {
-      alert("Failed to prioritize user");
+      toast.error("Failed to prioritize user");
     }
   };
 
@@ -169,9 +198,10 @@ export default function ManageQueuePage() {
     setIsDeletingQueue(true);
     try {
       await queueApi.deleteQueue(queue.id);
+      toast.success("Queue deleted", `"${queue.name}" has been permanently removed.`);
       router.replace('/dashboard/queues');
     } catch (e: any) {
-      alert(e.message || 'Failed to delete queue.');
+      toast.error("Failed to delete queue", e.message || 'Failed to delete queue.');
       setIsDeletingQueue(false);
     }
   };
@@ -213,6 +243,7 @@ export default function ManageQueuePage() {
 
       setGuestName("");
       setShowAddGuest(false);
+      toast.success("Walk-in added", `${guestName.trim()} has been added to the waitlist.`);
       fetchData();
     } catch (err: any) {
       setAddGuestError(err.message || "Failed to add guest.");
@@ -292,7 +323,7 @@ export default function ManageQueuePage() {
       }, 50);
     } catch (err) {
       console.warn("Failed to get camera access", err);
-      alert("Camera access denied or unavailable.");
+      toast.error("Camera access denied", "Camera access is unavailable or was denied.");
       setCameraActive(false);
     }
   };
@@ -318,6 +349,7 @@ export default function ManageQueuePage() {
     try {
       const result = await queueApi.verifyQr(token);
       setVerifiedEntry(result);
+      toast.success("Ticket verified", `${result.user?.name || "Participant"}'s ticket is valid.`);
       fetchData();
     } catch (err: any) {
       setScanError(err.message || "Ticket verification failed. Code is invalid or expired.");
@@ -364,7 +396,7 @@ export default function ManageQueuePage() {
     );
   }
 
-  const { desc, address, imageUrl } = parseQueueDetails(queue.description);
+  const { desc, address, imageUrl } = parseQueueDetails(queue.description, queue.image);
   const activeCount = participants.length;
 
   return (
@@ -387,6 +419,15 @@ export default function ManageQueuePage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 sm:ml-0 ml-12">
+          <Button 
+            onClick={() => setShowShareModal(true)} 
+            variant="secondary" 
+            className="gap-2 text-xs font-bold uppercase shrink-0"
+          >
+            <Share2 className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden sm:inline">Share Queue</span>
+            <span className="sm:hidden">Share</span>
+          </Button>
           <Button 
             onClick={handleOpenScanner} 
             variant="secondary" 
@@ -423,12 +464,21 @@ export default function ManageQueuePage() {
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{queue.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{queue.name}</h2>
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="h-7 w-7 flex items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-background transition-all cursor-pointer shrink-0"
+                  title="Edit queue details"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mt-1">ID: {queue.id}</p>
               {desc && (
-                <p className="text-xs text-muted-foreground font-medium mt-1.5 max-w-xl leading-relaxed">
-                  {desc}
-                </p>
+<p className="text-xs text-muted-foreground font-medium mt-1.5 max-w-xl leading-relaxed break-words">
+                   {desc}
+                 </p>
               )}
               {address && (
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-2 flex items-center gap-1">
@@ -871,6 +921,23 @@ export default function ManageQueuePage() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* Share Queue Modal */}
+      {showShareModal && queue && (
+        <ShareQueueModal queueId={queue.id} queueName={queue.name} onClose={() => setShowShareModal(false)} />
+      )}
+
+      {/* Edit Queue Modal */}
+      {showEditModal && queue && (
+        <EditQueueModal
+          queue={queue}
+          onClose={() => setShowEditModal(false)}
+          onSaved={(updated) => {
+            setQueue(updated)
+            setQueueActive(updated.status === "active")
+          }}
+        />
       )}
 
       {/* Prioritization Position Dialog */}

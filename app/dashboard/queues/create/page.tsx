@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Plus, X, Image as ImageIcon, Upload } from "lucide-
 import Link from "next/link"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
+import { useToast } from "@/shared/context/toast-context"
 import { queueApi, CreateQueueDto } from "@/features/Queue/services/queue.api"
 import { authApi } from "@/features/auth/services/auth.api"
 import { cn } from "@/shared/lib/utils"
@@ -26,6 +27,7 @@ export default function CreateQueuePage() {
     const router = useRouter()
     const [isLoading, setIsLoading] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
+    const toast = useToast()
 
     const [form, setForm] = React.useState<CreateQueueDto>({
         name: "",
@@ -57,8 +59,9 @@ export default function CreateQueuePage() {
         try {
             const { url } = await authApi.uploadImage(file)
             setUploadedImageUrl(url)
+            toast.success("Image uploaded", "Your business image has been uploaded successfully.")
         } catch (err: any) {
-            alert(err.message || "Failed to upload image")
+            toast.error("Failed to upload image", err.message || "Failed to upload image")
         } finally {
             setIsUploadingImage(false)
         }
@@ -79,7 +82,7 @@ export default function CreateQueuePage() {
                     ? PRESET_IMAGES[imageOption] 
                     : "";
 
-        // Package metadata inside the description field as JSON string
+        // Package metadata inside the description field as JSON string (backward compat)
         const serializedDescription = JSON.stringify({
             desc: form.description || "",
             address: address.trim(),
@@ -88,11 +91,13 @@ export default function CreateQueuePage() {
 
         const payload: CreateQueueDto = {
             ...form,
-            description: serializedDescription
+            description: serializedDescription,
+            image: finalImage || undefined,
         }
 
         try {
             await queueApi.createQueue(payload)
+            toast.success("Queue created!", `"${payload.name}" is now live.`)
             router.push("/dashboard/queues")
         } catch (err: any) {
             setError(err.message ?? "Failed to create queue")

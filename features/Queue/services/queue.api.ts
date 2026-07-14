@@ -78,6 +78,7 @@ export interface Queue {
     id: number;
     name: string;
     description: string | null;
+    image: string | null;
     maxParticipants: number;
     customFields: Record<string, any>[];
     avgServiceTime: number;
@@ -112,6 +113,16 @@ export interface QueueEntry {
 export interface CreateQueueDto {
     name: string;
     description?: string;
+    image?: string;
+    maxParticipants?: number;
+    avgServiceTime?: number;
+    customFields?: Record<string, any>[];
+}
+
+export interface UpdateQueueDto {
+    name?: string;
+    description?: string;
+    image?: string;
     maxParticipants?: number;
     avgServiceTime?: number;
     customFields?: Record<string, any>[];
@@ -200,6 +211,13 @@ export const queueApi = {
         request<QueueEntry>('/queues/verify-qr', {
             method: 'POST',
             body: JSON.stringify({ token }),
+        }),
+
+    /** Update a queue's name, description, or other metadata (owner only). */
+    updateQueue: (id: number, dto: UpdateQueueDto): Promise<Queue> =>
+        request<Queue>(`/queues/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(dto),
         }),
 
     /** Delete a queue permanently (owner only). */

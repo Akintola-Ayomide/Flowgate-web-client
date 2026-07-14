@@ -2,8 +2,10 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Search, Plus, Filter, RefreshCw, Loader2, Trash2 } from "lucide-react"
+import { Search, Plus, Filter, RefreshCw, Loader2, Trash2, Share2, Check } from "lucide-react"
 import { Button } from "@/shared/ui/button"
+import { ShareQueueModal } from "@/shared/ui/share-queue-modal"
+import { useToast } from "@/shared/context/toast-context"
 import { queueApi, Queue, QueueStatus } from "@/features/Queue/services/queue.api"
 import { cn } from "@/shared/lib/utils"
 
@@ -23,9 +25,9 @@ function StatusBadge({ status }: { status: QueueStatus }) {
 }
 
 // Helper to parse description + address + image
-function parseQueueDetails(description: string | null): { desc: string; address: string | null; imageUrl: string | null } {
+function parseQueueDetails(description: string | null, imageFallback?: string | null): { desc: string; address: string | null; imageUrl: string | null } {
     if (!description) {
-        return { desc: 'No description provided.', address: null, imageUrl: null };
+        return { desc: 'No description provided.', address: null, imageUrl: imageFallback || null };
     }
     try {
         const parsed = JSON.parse(description);
@@ -33,13 +35,13 @@ function parseQueueDetails(description: string | null): { desc: string; address:
             return {
                 desc: parsed.desc || 'No description provided.',
                 address: parsed.address || null,
-                imageUrl: parsed.image || null
+                imageUrl: imageFallback || parsed.image || null
             };
         }
     } catch {
         // Fallback for plain text descriptions
     }
-    return { desc: description, address: null, imageUrl: null };
+    return { desc: description, address: null, imageUrl: imageFallback || null };
 }
 
 export default function QueuesPage() {
@@ -50,6 +52,8 @@ export default function QueuesPage() {
     const [statusFilter, setStatusFilter] = React.useState<QueueStatus | "all">("all")
     const [updatingId, setUpdatingId] = React.useState<number | null>(null)
     const [deletingId, setDeletingId] = React.useState<number | null>(null)
+    const [shareTarget, setShareTarget] = React.useState<{ id: number; name: string } | null>(null)
+    const toast = useToast();
 
     const fetchQueues = React.useCallback(async () => {
         setIsLoading(true)
@@ -78,8 +82,9 @@ export default function QueuesPage() {
         try {
             const updated = await queueApi.updateStatus(queue.id, next)
             setQueues((prev) => prev.map((q) => q.id === updated.id ? { ...q, status: updated.status } : q))
+            toast.success(`Queue ${next === "active" ? "resumed" : "paused"}`, `"${queue.name}" is now ${next}.`)
         } catch (err: any) {
-            alert(err.message)
+            toast.error("Failed to update status", err.message)
         } finally {
             setUpdatingId(null)
         }
@@ -90,10 +95,10 @@ export default function QueuesPage() {
         setDeletingId(queue.id)
         try {
             await queueApi.deleteQueue(queue.id)
-            // Optimistic removal — no need to re-fetch the whole list.
             setQueues((prev) => prev.filter((q) => q.id !== queue.id))
+            toast.success("Queue deleted", `"${queue.name}" has been removed.`)
         } catch (err: any) {
-            alert(err.message || 'Failed to delete queue.')
+            toast.error("Failed to delete queue", err.message || 'Failed to delete queue.')
         } finally {
             setDeletingId(null)
         }
@@ -133,8 +138,8 @@ export default function QueuesPage() {
                     <Link href="/dashboard/queues/create" className="shrink-0">
                         <Button className="gap-2 text-xs font-bold whitespace-nowrap">
                             <Plus className="h-4 w-4" />
-                            <span className="hidden xs:inline">Create Queue</span>
-                            <span className="xs:hidden">Create</span>
+                            <span className="hidden sm:inline">Create Queue</span>
+                            <span className="sm:hidden">Create</span>
                         </Button>
                     </Link>
                 </div>
@@ -204,7 +209,7 @@ export default function QueuesPage() {
                                 {filtered.map((queue) => {
                                     const waiting = queue.activeParticipants ?? queue.inLine ?? 0
                                     const pct = Math.min((waiting / queue.maxParticipants) * 100, 100)
-                                    const { desc, imageUrl } = parseQueueDetails(queue.description)
+                                    const { desc, imageUrl } = parseQueueDetails(queue.description, queue.image)
                                     return (
                                         <tr key={queue.id} className="hover:bg-secondary/35 transition-colors">
                                             <td className="px-6 py-4 font-semibold text-foreground">
@@ -222,7 +227,7 @@ export default function QueuesPage() {
                                                     <div className="min-w-0">
                                                         <div className="truncate font-bold">{queue.name}</div>
                                                         {desc && (
-                                                            <div className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-xs">{desc}</div>
+                                                            <div className="text-[10px] text-muted-foreground font-medium mt-0.5 break-words max-w-xs">{desc}</div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -260,6 +265,13 @@ export default function QueuesPage() {
                                                         Manage
                                                     </Link>
                                                     <button
+                                                        onClick={() => setShareTarget({ id: queue.id, name: queue.name })}
+                                                        className="h-7 w-7 flex items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                                                        title="Share Queue"
+                                                    >
+                                                        <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleDeleteQueue(queue)}
                                                         disabled={deletingId === queue.id}
                                                         className="h-7 w-7 flex items-center justify-center rounded-md border border-destructive/20 text-destructive hover:bg-destructive/10 hover:border-destructive/40 disabled:opacity-50 transition-colors cursor-pointer"
@@ -281,7 +293,7 @@ export default function QueuesPage() {
                         {filtered.map((queue) => {
                             const waiting = queue.activeParticipants ?? queue.inLine ?? 0
                             const pct = Math.min((waiting / queue.maxParticipants) * 100, 100)
-                            const { desc, imageUrl } = parseQueueDetails(queue.description)
+                            const { desc, imageUrl } = parseQueueDetails(queue.description, queue.image)
                             return (
                                 <div key={queue.id} className="bg-background border border-border/80 rounded-md p-4 shadow-xs">
                                     <div className="flex items-start justify-between gap-3 mb-3">
@@ -299,7 +311,7 @@ export default function QueuesPage() {
                                             <div className="min-w-0">
                                                 <p className="font-semibold text-foreground text-sm truncate">{queue.name}</p>
                                                 {desc && (
-                                                    <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate">{desc}</p>
+                                                    <p className="text-[10px] text-muted-foreground font-medium mt-0.5 break-words">{desc}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -348,6 +360,13 @@ export default function QueuesPage() {
                                             Manage
                                         </Link>
                                         <button
+                                            onClick={() => setShareTarget({ id: queue.id, name: queue.name })}
+                                            className="h-9 w-9 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
+                                            title="Share Queue"
+                                        >
+                                            <Share2 className="h-4 w-4 text-muted-foreground" />
+                                        </button>
+                                        <button
                                             onClick={() => handleDeleteQueue(queue)}
                                             disabled={deletingId === queue.id}
                                             className="h-9 w-9 flex items-center justify-center rounded-md border border-destructive/20 text-destructive hover:bg-destructive/10 hover:border-destructive/40 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
@@ -361,6 +380,11 @@ export default function QueuesPage() {
                         })}
                     </div>
                 </>
+            )}
+
+            {/* Share Queue Modal */}
+            {shareTarget && (
+                <ShareQueueModal queueId={shareTarget.id} queueName={shareTarget.name} onClose={() => setShareTarget(null)} />
             )}
         </div>
     )
